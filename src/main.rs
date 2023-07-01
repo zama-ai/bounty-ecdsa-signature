@@ -2,12 +2,8 @@ use std::time::Instant;
 
 use rand::{thread_rng, Rng};
 use tfhe::{
-    integer::{
-        ciphertext::BaseRadixCiphertext, gen_keys_radix, keycache::IntegerKeyCache, ServerKey, U256,
-    },
-    prelude::*,
+    integer::{ciphertext::BaseRadixCiphertext, keycache::IntegerKeyCache, ServerKey, U256},
     shortint::{parameters::PARAM_MESSAGE_2_CARRY_2, Ciphertext},
-    FheUint256,
 };
 
 type Ctxt = BaseRadixCiphertext<Ciphertext>;
@@ -18,8 +14,6 @@ const BITS: usize = 256;
 fn format_u256(a: &U256) -> String {
     let mut bytes = [0u8; 32];
     a.copy_to_be_byte_slice(&mut bytes);
-    // hex to decimal String
-    let mut res = String::new();
     bytes
         .iter()
         .map(|b| format!("{:02}", b))
@@ -51,7 +45,7 @@ fn mul_mod(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
         //let mut result_tmp = None;
         //let mut result_bb = None;
 
-        let ((bb, tmp), res) = rayon::join(
+        ((bb, tmp), res) = rayon::join(
             || {
                 rayon::join(
                     || server_key.scalar_right_shift_parallelized(&bb, 1),
@@ -93,7 +87,7 @@ fn main() {
     // We use the client key to encrypt two messages:
     let ct_1 = client_key.encrypt_radix(msg1, NUM_BLOCK);
     //let mut ct_2 = client_key.encrypt_radix(msg2, num_block);
-    let ct_p = server_key.create_trivial_radix(p, NUM_BLOCK);
+    //let ct_p = server_key.create_trivial_radix(p, NUM_BLOCK);
 
     //let now = Instant::now();
     //let res = add_mod(&ct_1, &ct_1, p, &server_key);
