@@ -16,8 +16,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut added, p);
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut is_gt, &mut server_key.create_trivial_radix(p, NB));
-    let res = server_key.smart_sub_parallelized(&mut added, &mut to_sub);
-    res
+    server_key.smart_sub_parallelized(&mut added, &mut to_sub)
 }
 
 pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
@@ -27,27 +26,44 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let mut res = server_key.create_trivial_radix(0u64, NB);
-    let mut tmp = a.clone();
-    let mut bb = b.clone();
     let now = Instant::now();
 
+    let mut res = server_key.create_trivial_radix(0u64, NB);
+    let mut a_tmp = a.clone();
+    let b_tmp = b.clone();
+    let (mut b_next_tmp, mut bit) = rayon::join(
+        || server_key.scalar_right_shift_parallelized(&b_tmp, 1),
+        || server_key.smart_scalar_bitand_parallelized(&mut b_tmp.clone(), 1),
+    );
+    let mut to_add_later = res.clone();
+
+    println!("initial cost - {} ms", now.elapsed().as_millis());
+
     for i in 0..<P as Numeric>::BITS {
-        ((bb, tmp), res) = rayon::join(
+        let now = Instant::now();
+
+        ((b_next_tmp, a_tmp), (bit, (res, to_add_later))) = rayon::join(
             || {
                 rayon::join(
-                    || server_key.scalar_right_shift_parallelized(&bb, 1),
-                    || add_mod::<NB, P>(&tmp, &tmp, p, &server_key),
+                    || server_key.scalar_right_shift_parallelized(&b_next_tmp, 1),
+                    || add_mod::<NB, _>(&a_tmp, &a_tmp, p, server_key),
                 )
             },
             || {
-                let mut bit = server_key.smart_scalar_bitand_parallelized(&mut bb.clone(), 1);
-                let to_add = server_key.smart_mul_parallelized(&mut tmp.clone(), &mut bit);
-                add_mod::<NB, P>(&res, &to_add, p, &server_key)
+                rayon::join(
+                    || server_key.smart_scalar_bitand_parallelized(&mut b_next_tmp.clone(), 1),
+                    || {
+                        rayon::join(
+                            || add_mod::<NB, _>(&res, &to_add_later, p, server_key),
+                            || server_key.smart_mul_parallelized(&mut a_tmp.clone(), &mut bit),
+                        )
+                    },
+                )
             },
         );
 
         println!("time used {i} - {}", now.elapsed().as_secs());
     }
-    res
+
+    add_mod::<NB, _>(&res, &to_add_later, p, server_key)
 }
