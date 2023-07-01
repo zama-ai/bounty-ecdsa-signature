@@ -32,7 +32,6 @@ fn add_mod(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
     let res = server_key.smart_sub_parallelized(&mut added, &mut to_sub);
     res
 }
-
 fn mul_mod(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
     // assume large p and a,b < p
     let mut res = server_key.create_trivial_radix(0u64, NUM_BLOCK);
@@ -73,6 +72,48 @@ fn mul_mod(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
     res
 }
 
+fn mul_mod_pipe(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
+    // assume large p and a,b < p
+    let now = Instant::now();
+
+    let mut res = server_key.create_trivial_radix(0u64, NUM_BLOCK);
+    let mut a_tmp = a.clone();
+    let b_tmp = b.clone();
+    let mut b_next_tmp = server_key.scalar_right_shift_parallelized(&b_tmp, 1);
+    let mut bit = server_key.smart_scalar_bitand_parallelized(&mut b_tmp.clone(), 1);
+    let mut bit_next: BaseRadixCiphertext<Ciphertext>;
+    let mut to_add_later = server_key.create_trivial_radix(0u64, NUM_BLOCK);
+    println!("initial cost - {}ms", now.elapsed().as_millis());
+
+    for i in 0..BITS {
+        let now = Instant::now();
+
+        ((b_next_tmp, a_tmp), (bit_next, (res, to_add_later))) = rayon::join(
+            || {
+                rayon::join(
+                    || server_key.scalar_right_shift_parallelized(&b_next_tmp, 1),
+                    || add_mod(&a_tmp, &a_tmp, p, &server_key),
+                )
+            },
+            || {
+                rayon::join(
+                    || server_key.smart_scalar_bitand_parallelized(&mut b_next_tmp.clone(), 1),
+                    || {
+                        rayon::join(
+                            || add_mod(&res, &to_add_later, p, &server_key),
+                            || server_key.smart_mul_parallelized(&mut a_tmp.clone(), &mut bit),
+                        )
+                    },
+                )
+            },
+        );
+        bit = bit_next.clone();
+        println!("time used {i} - {}", now.elapsed().as_secs());
+    }
+    res = add_mod(&res, &to_add_later, p, &server_key);
+    res
+}
+
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
     // let (client_key, server_key) = gen_keys_radix(&PARAM_MESSAGE_2_CARRY_2, num_block);
@@ -103,7 +144,21 @@ fn main() {
     //println!("in {} s\n", elasped.as_secs());
 
     let now = Instant::now();
+    let res = mul_mod_pipe(&ct_1, &ct_1, p, &server_key);
+
+    let elasped = now.elapsed();
+    let res = client_key.decrypt_radix::<U256>(&res);
+    print!(
+        "{} * {} mod (new) {} -> {}",
+        format_u256(&msg1),
+        format_u256(&msg1),
+        format_u256(&p),
+        format_u256(&res)
+    );
+    println!("in {} s\n", elasped.as_secs());
+    let now = Instant::now();
     let res = mul_mod(&ct_1, &ct_1, p, &server_key);
+
     let elasped = now.elapsed();
     let res = client_key.decrypt_radix::<U256>(&res);
     print!(
