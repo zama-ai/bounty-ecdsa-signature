@@ -1,12 +1,18 @@
+#![allow(unused_imports)]
+#![feature(iter_array_chunks)]
+
 use std::time::Instant;
 
 use rand::{thread_rng, Rng};
 use tfhe::{
-    integer::{ciphertext::BaseRadixCiphertext, keycache::IntegerKeyCache, ServerKey, U256},
-    shortint::{parameters::PARAM_MESSAGE_2_CARRY_2, Ciphertext},
+    integer::{keycache::IntegerKeyCache, U256},
+    shortint::parameters::PARAM_MESSAGE_2_CARRY_2,
 };
 
-type Ctxt = BaseRadixCiphertext<Ciphertext>;
+use crate::{
+    helper::format,
+    ops::{add_mod, mul_mod},
+};
 
 const NUM_BLOCK: usize = 129;
 const BITS: usize = 256;
@@ -115,31 +121,54 @@ fn mul_mod_pipe(a: &Ctxt, b: &Ctxt, p: U256, server_key: &ServerKey) -> Ctxt {
 }
 
 fn main() {
-    let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-    // let (client_key, server_key) = gen_keys_radix(&PARAM_MESSAGE_2_CARRY_2, num_block);
-    let mut msg1 = U256::ZERO;
-    msg1.copy_from_le_byte_slice(&thread_rng().gen::<[u8; BITS / 8]>());
-    //let msg2 = 159u64;
-    let mut p = U256::ZERO;
-    p.copy_from_be_byte_slice(
-        &hex::decode("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f").unwrap(),
-    );
+    const NUM_BLOCK: usize = 64;
+    type Integer = u128;
 
-    // We use the client key to encrypt two messages:
+    let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
+    let msg1: Integer = 1389;
+    let p: Integer = 13841;
+
+    //let msg1 = {
+    //let mut msg = U256::ZERO;
+    //msg.copy_from_le_byte_slice(&thread_rng().gen::<[u8; 32]>());
+    //msg
+    //};
+    //let p = {
+    //let mut p = U256::ZERO;
+    //p.copy_from_be_byte_slice(
+    //&hex::decode("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f")
+    //.unwrap(),
+    //);
+    //p
+    //};
+
     let ct_1 = client_key.encrypt_radix(msg1, NUM_BLOCK);
-    //let mut ct_2 = client_key.encrypt_radix(msg2, num_block);
-    //let ct_p = server_key.create_trivial_radix(p, NUM_BLOCK);
+    assert_eq!(msg1, client_key.decrypt_radix::<Integer>(&ct_1));
+
+    let now = Instant::now();
+    let res = add_mod::<NUM_BLOCK, _>(&ct_1, &ct_1, p, &server_key);
+    let elasped = now.elapsed();
+    let res = client_key.decrypt_radix::<Integer>(&res);
+    println!(
+        "{} + {} mod {} -> {}",
+        format(msg1),
+        format(msg1),
+        format(p),
+        format(res)
+    );
+    println!("in {} s\n", elasped.as_secs());
 
     //let now = Instant::now();
-    //let res = add_mod(&ct_1, &ct_1, p, &server_key);
+    //let res = mul_mod::<NUM_BLOCK, _>(&ct_1, &ct_1, p, &server_key);
     //let elasped = now.elapsed();
-    //let res = client_key.decrypt_radix::<U256>(&res);
-    //println!(
-    //"{} + {} mod {} -> {}",
-    //format_u256(&msg1),
-    //format_u256(&msg1),
-    //format_u256(&p),
-    //format_u256(&res)
+    //let res = client_key.decrypt_radix::<Integer>(&res);
+    //print!(
+    //"{} * {} mod {} -> {}",
+    //format(msg1),
+    //format(msg1),
+    //format(p),
+    //format(res)
     //);
     //println!("in {} s\n", elasped.as_secs());
 
