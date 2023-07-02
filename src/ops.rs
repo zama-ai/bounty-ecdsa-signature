@@ -37,9 +37,10 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
         || server_key.scalar_right_shift_parallelized(&b_tmp, 1),
         || server_key.smart_scalar_bitand_parallelized(&mut b_tmp.clone(), 1),
     );
+    server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
     let mut to_add_later = res.clone();
 
-    println!("initial cost - {} ms", now.elapsed().as_millis());
+    println!("initial cost - {}ms", now.elapsed().as_millis());
 
     for i in 0..<P as Numeric>::BITS {
         let now = Instant::now();
@@ -53,7 +54,12 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
             },
             || {
                 rayon::join(
-                    || server_key.smart_scalar_bitand_parallelized(&mut b_next_tmp.clone(), 1),
+                    || {
+                        let mut bit =
+                            server_key.smart_scalar_bitand_parallelized(&mut b_next_tmp.clone(), 1);
+                        server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+                        bit
+                    },
                     || {
                         rayon::join(
                             || add_mod::<NB, _>(&res, &to_add_later, p, server_key),
@@ -64,7 +70,7 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
             },
         );
 
-        println!("time used {i} - {}", now.elapsed().as_secs());
+        println!("time used for bit {i} - {}s", now.elapsed().as_secs());
     }
 
     add_mod::<NB, _>(&res, &to_add_later, p, server_key)
