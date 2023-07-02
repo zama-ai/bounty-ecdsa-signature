@@ -14,8 +14,10 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     // assume large p and a,b < p
     let mut added = server_key.smart_add_parallelized(&mut a.clone(), &mut b.clone());
     let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut added, p);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     let mut to_sub =
-        server_key.smart_mul_parallelized(&mut is_gt, &mut server_key.create_trivial_radix(p, NB));
+        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+
     server_key.smart_sub_parallelized(&mut added, &mut to_sub)
 }
 
