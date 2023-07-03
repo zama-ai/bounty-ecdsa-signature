@@ -11,7 +11,11 @@ use tfhe::{
 
 use crate::{
     helper::format,
-    ops::{add_mod, group_projective_double, inverse_mod, mul_mod, pow_mod},
+    ops::{
+        add_mod,
+        group::{group_projective_double, group_projective_into_affine},
+        inverse_mod, mul_mod, pow_mod,
+    },
 };
 
 pub mod helper;
@@ -20,12 +24,12 @@ pub mod ops;
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
-    const NUM_BLOCK: usize = 8;
-    type Integer = u16;
-    let p: Integer = 1049;
-    let x: Integer = 460;
-    let y: Integer = 388;
-    //let z: Integer = 1;
+    const NUM_BLOCK: usize = 4;
+    type Integer = u8;
+    let p: Integer = 251;
+    let x: Integer = 8;
+    let y: Integer = 45;
+    let z: Integer = 1;
 
     //const NUM_BLOCK: usize = 128;
     //type Integer = U256;
@@ -49,22 +53,27 @@ fn main() {
 
     let ct_x = client_key.encrypt_radix(x, NUM_BLOCK);
     let ct_y = client_key.encrypt_radix(y, NUM_BLOCK);
-    //let ct_z = client_key.encrypt_radix(z, NUM_BLOCK);
+    let ct_z = client_key.encrypt_radix(z, NUM_BLOCK);
     assert_eq!(x, client_key.decrypt_radix::<Integer>(&ct_x));
     assert_eq!(y, client_key.decrypt_radix::<Integer>(&ct_y));
     //assert_eq!(z, client_key.decrypt_radix::<Integer>(&ct_z));
 
-    let now = Instant::now();
-    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x, p, &server_key);
-    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
-    println!(
-        "invert {} over p {} -> {}",
-        format(x),
-        format(p),
-        format(res_decoded)
-    );
-    let elasped = now.elapsed();
-    println!("in {} s\n", elasped.as_secs());
+    //let to_inverse: Integer = 90;
+    //let now = Instant::now();
+    //let res = inverse_mod::<NUM_BLOCK, _>(
+    //&client_key.encrypt_radix(to_inverse, NUM_BLOCK),
+    //p,
+    //&server_key,
+    //);
+    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    //println!(
+    //"invert {} over p {} -> {}",
+    //format(to_inverse),
+    //format(p),
+    //format(res_decoded)
+    //);
+    //let elasped = now.elapsed();
+    //println!("in {} s\n", elasped.as_secs());
 
     //let now = Instant::now();
     //let res = add_mod::<NUM_BLOCK, _>(&ct_1, &ct_1, p, &server_key);
@@ -93,21 +102,6 @@ fn main() {
     //println!("in {} s\n", elasped.as_secs());
 
     //let now = Instant::now();
-    //let (x_new, y_new, z_new) =
-    //group_projective_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
-    //let elasped = now.elapsed();
-    //print!(
-    //"{},{},{} * 2 -> {},{},{}",
-    //format(x),
-    //format(y),
-    //format(z),
-    //format(client_key.decrypt_radix::<Integer>(&x_new)),
-    //format(client_key.decrypt_radix::<Integer>(&y_new)),
-    //format(client_key.decrypt_radix::<Integer>(&z_new))
-    //);
-    //println!("in {} s\n", elasped.as_secs());
-
-    //let now = Instant::now();
     //let res = pow_mod::<NUM_BLOCK, _>(&ct_x, &ct_y, p, &server_key);
     //let elasped = now.elapsed();
     //print!(
@@ -118,4 +112,35 @@ fn main() {
     //format(client_key.decrypt_radix::<Integer>(&res)),
     //);
     //println!("in {} s\n", elasped.as_secs());
+
+    let now = Instant::now();
+    let (x_new, y_new, z_new) =
+        group_projective_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
+    let elasped = now.elapsed();
+    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    println!(
+        "{},{},{} * 2 -> {},{},{}",
+        format(x),
+        format(y),
+        format(z),
+        format(x_dec),
+        format(y_dec),
+        format(z_dec)
+    );
+    println!("group double in {} s", elasped.as_secs());
+    let now = Instant::now();
+    let (x_aff, y_aff) =
+        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+    let elasped = now.elapsed();
+    println!(
+        "{},{},{} -> {},{}",
+        format(x_dec),
+        format(y_dec),
+        format(z_dec),
+        format(client_key.decrypt_radix::<Integer>(&x_aff)),
+        format(client_key.decrypt_radix::<Integer>(&y_aff))
+    );
+    println!("group projective into affine in {}s", elasped.as_secs());
 }
