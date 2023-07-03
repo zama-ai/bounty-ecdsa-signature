@@ -2,11 +2,73 @@ use std::time::Instant;
 
 use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
+    integer::ClientKey,
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
         IntegerCiphertext, RadixCiphertext, ServerKey,
     },
 };
+
+pub fn invert_mod<const NB: usize, const NATTEMP: usize>(
+    a: &RadixCiphertext,
+    p: &RadixCiphertext,
+    server_key: &ServerKey,
+    client_key: &ClientKey,
+) -> RadixCiphertext {
+    // implement extended euclidean algorithm
+    // assume a < p. (no check)
+    let a = a.clone();
+    let mut r0 = p.clone();
+    let mut r1 = a.clone();
+    let mut was_done = server_key.create_trivial_radix(0, 1);
+    let mut t0 = server_key.create_trivial_radix(0, NB);
+    let mut t1 = server_key.create_trivial_radix(1, NB);
+    let mut inv = server_key.create_trivial_radix(0, NB);
+
+    // euclidean algorithm
+    for _ in 0..NATTEMP {
+        let (q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let tmp = t1.clone();
+        t1 = server_key.smart_sub_parallelized(
+            &mut t0.clone(),
+            &mut server_key.smart_mul_parallelized(&mut q.clone(), &mut t1.clone()),
+        );
+        t0 = tmp;
+        let done = server_key.smart_scalar_eq_parallelized(&mut r.clone(), 0);
+        let never_done = server_key.smart_sub_parallelized(
+            &mut server_key.create_trivial_radix(1, NB),
+            &mut was_done.clone(),
+        );
+        let done_now =
+            server_key.smart_bitand_parallelized(&mut done.clone(), &mut never_done.clone());
+        was_done = server_key.smart_bitor(&mut done.clone(), &mut was_done.clone());
+
+        let update = server_key.smart_mul_parallelized(&mut done_now.clone(), &mut t0.clone());
+        inv = server_key.smart_add_parallelized(&mut inv.clone(), &mut update.clone());
+
+        let d_a: u32 = client_key.decrypt_radix::<u32>(&r0.clone());
+        let d_b: u32 = client_key.decrypt_radix::<u32>(&r1.clone());
+        let dq: u32 = client_key.decrypt_radix::<u32>(&q);
+        let dr: u32 = client_key.decrypt_radix::<u32>(&r);
+        let dt1: u32 = client_key.decrypt_radix::<u32>(&t1);
+        let d_inv: u32 = client_key.decrypt_radix::<u32>(&inv);
+        println!(
+            "{} = ({} * {}) + {} t = {} -- ans = {}",
+            d_a, d_b, dq, dr, dt1, d_inv
+        );
+        // update values
+        r0 = r1.clone();
+        r1 = r.clone();
+    }
+
+    // final result
+    let mut tmp = server_key.smart_add(&mut p.clone(), &mut inv);
+    let mut is_gt = server_key.smart_ge_parallelized(&mut tmp.clone(), &mut p.clone());
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    let mut to_sub = server_key.smart_mul_parallelized(&mut p.clone(), &mut is_gt);
+    tmp = server_key.smart_sub_parallelized(&mut tmp.clone(), &mut to_sub);
+    tmp.clone()
+}
 
 use crate::helper::format;
 
