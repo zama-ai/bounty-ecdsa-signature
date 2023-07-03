@@ -301,17 +301,42 @@ pub fn group_projective_add_affine<
     (x3, y3, z3)
 }
 
-//pub fn group_projective_into_affine<
-//const NB: usize,
-//P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
-//>(
-//x1: &RadixCiphertext,
-//y1: &RadixCiphertext,
-//z1: &RadixCiphertext,
-//p: P,
-//server_key: &ServerKey,
-//) -> (RadixCiphertext, RadixCiphertext) {
-//}
+/// a^b mod p
+pub fn pow_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+    a: &RadixCiphertext,
+    b: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let mut res = server_key.create_trivial_radix(1, NB);
+    let mut base = a.clone();
+    let mut exponent = b.clone();
+
+    for i in 0..<P as Numeric>::BITS {
+        let timer = Instant::now();
+        (res, (exponent, base)) = rayon::join(
+            || {
+                let mut bit = server_key.scalar_bitand_parallelized(&exponent, 1);
+                server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+                // tmp = bit == 1 ? base : 1;
+                // tmp = base * bit + 1 - bit
+                let mut tmp = server_key.smart_mul_parallelized(&mut base.clone(), &mut bit);
+                server_key.smart_scalar_add_assign_parallelized(&mut tmp, 1);
+                server_key.smart_sub_assign_parallelized(&mut tmp, &mut bit);
+                mul_mod::<NB, _>(&res, &tmp, p, server_key)
+            },
+            || {
+                rayon::join(
+                    || server_key.scalar_right_shift_parallelized(&exponent, 1),
+                    || square_mod::<NB, _>(&base, p, server_key),
+                )
+            },
+        );
+        println!("pow mod bit {i} took {:.2}s", timer.elapsed().as_secs_f32());
+    }
+
+    res
+}
 
 #[cfg(test)]
 mod tests {
