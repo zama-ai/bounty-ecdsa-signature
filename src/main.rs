@@ -23,8 +23,8 @@ fn main() {
     const NUM_BLOCK: usize = 4;
     type Integer = u8;
     let p: Integer = 251;
-    let x: Integer = 199;
-    let y: Integer = 81;
+    let x: Integer = 18;
+    let y: Integer = 130;
 
     //const NUM_BLOCK: usize = 128;
     //type Integer = U256;

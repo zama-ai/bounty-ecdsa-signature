@@ -2,8 +2,13 @@ use std::time::Instant;
 
 use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
-    integer::{block_decomposition::DecomposableInto, RadixCiphertext, ServerKey},
+    integer::{
+        block_decomposition::{DecomposableInto, RecomposableFrom},
+        IntegerCiphertext, RadixCiphertext, ServerKey,
+    },
 };
+
+use crate::helper::format;
 
 /// a + b mod p
 pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
@@ -13,7 +18,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(&a, 1);
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
     let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
@@ -34,7 +39,7 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
     let mut to_add =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
-    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(&a, 1);
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
@@ -63,6 +68,7 @@ pub fn mul_mod_bitwise<
         || server_key.smart_scalar_bitand_parallelized(&mut b_tmp.clone(), 1),
     );
     server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+    #[allow(clippy::redundant_clone)]
     let mut to_add_later = res.clone();
 
     println!("initial cost - {}ms", now.elapsed().as_millis());
@@ -109,7 +115,7 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(&a, NB);
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
     let (_q, mut r) = server_key.smart_div_rem_parallelized(
         &mut a_expanded,
@@ -132,7 +138,7 @@ pub fn mul_mod_constant<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(&a, NB);
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_scalar_mul_assign_parallelized(&mut a_expanded, b);
     let (_q, mut r) = server_key.smart_div_rem_parallelized(
         &mut a_expanded,
@@ -229,9 +235,9 @@ pub fn group_projective_double<
             )
         },
         || {
-            let enc_2c = double_mod::<NB, _>(&c, p, &server_key);
-            let enc_4c = double_mod::<NB, _>(&enc_2c, p, &server_key);
-            double_mod::<NB, _>(&enc_4c, p, &server_key)
+            let enc_2c = double_mod::<NB, _>(&c, p, server_key);
+            let enc_4c = double_mod::<NB, _>(&enc_2c, p, server_key);
+            double_mod::<NB, _>(&enc_4c, p, server_key)
         },
     );
     let y_prime = sub_mod::<NB, _>(&edx, &c8, p, server_key);
@@ -302,7 +308,10 @@ pub fn group_projective_add_affine<
 }
 
 /// a^b mod p
-pub fn pow_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+pub fn pow_mod<
+    const NB: usize,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -317,10 +326,14 @@ pub fn pow_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
         (res, (exponent, base)) = rayon::join(
             || {
                 let mut bit = server_key.scalar_bitand_parallelized(&exponent, 1);
-                server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+                // The line below breaks subtraction
+                //server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
                 // tmp = bit == 1 ? base : 1;
                 // tmp = base * bit + 1 - bit
-                let mut tmp = server_key.smart_mul_parallelized(&mut base.clone(), &mut bit);
+                let mut tmp = server_key.smart_mul_parallelized(
+                    &mut base.clone(),
+                    &mut server_key.trim_radix_blocks_msb(&bit, NB - 1),
+                );
                 server_key.smart_scalar_add_assign_parallelized(&mut tmp, 1);
                 server_key.smart_sub_assign_parallelized(&mut tmp, &mut bit);
                 mul_mod::<NB, _>(&res, &tmp, p, server_key)
@@ -342,14 +355,22 @@ pub fn pow_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
 mod tests {
     use std::time::Instant;
 
-    use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
+    use tfhe::{
+        core_crypto::prelude::Numeric,
+        integer::{keycache::IntegerKeyCache, IntegerCiphertext, RadixCiphertext},
+        shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
+    };
 
-    use crate::ops::{double_mod, mul_mod_constant};
+    use crate::{
+        helper::format,
+        ops::{double_mod, mul_mod_constant},
+    };
 
     #[test]
     #[ignore = "bench"]
     fn bench_8a() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
         const NUM_BLOCK: usize = 8;
         type Integer = u16;
         let p: Integer = 13841;
@@ -365,5 +386,27 @@ mod tests {
         let timer = Instant::now();
         let _enc_8a_mul = mul_mod_constant::<NUM_BLOCK, _, _>(&enc_a, 8u8, p, &server_key);
         println!("8a using multiplication - {}s", timer.elapsed().as_secs());
+    }
+
+    #[test]
+    fn correct_pow_mod() {
+        type Integer = u128;
+        let p: Integer = 251;
+        let x: Integer = 199;
+        let y: Integer = 81;
+
+        let mut base = x;
+        let mut exponent = y;
+        let mut res = <Integer as Numeric>::ONE;
+
+        for _ in 0..<Integer as Numeric>::BITS {
+            let bit = exponent & 1;
+            let tmp = bit * base + 1 - bit;
+            res = res * tmp % p;
+            base = (base * base) % p;
+            exponent >>= 1;
+        }
+
+        println!("Result: {}", res);
     }
 }
