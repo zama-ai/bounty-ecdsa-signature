@@ -11,7 +11,7 @@ use tfhe::{
 
 use crate::{
     helper::format,
-    ops::{add_mod, group_double, mul_mod},
+    ops::{add_mod, group_projective_double, mul_mod},
 };
 
 pub mod helper;
@@ -81,7 +81,8 @@ fn main() {
     //println!("in {} s\n", elasped.as_secs());
 
     let now = Instant::now();
-    let (x_new, y_new, z_new) = group_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
+    let (x_new, y_new, z_new) =
+        group_projective_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
     let elasped = now.elapsed();
     print!(
         "{},{},{} * 2 -> {},{},{}",
