@@ -15,11 +15,13 @@ use crate::{
         add_mod,
         group::{
             group_projective_add_projective, group_projective_double, group_projective_into_affine,
+            group_projective_scalar_mul,
         },
         inverse_mod, mul_mod, pow_mod,
     },
 };
 
+pub mod ecdsa;
 pub mod helper;
 pub mod ops;
 
@@ -146,6 +148,9 @@ fn main() {
     //&client_key.encrypt_radix(26, NUM_BLOCK),
     //&client_key.encrypt_radix(55, NUM_BLOCK),
     //&server_key.create_trivial_radix(1, NUM_BLOCK),
+    ////&server_key.create_trivial_radix(0, NUM_BLOCK),
+    ////&server_key.create_trivial_radix(0, NUM_BLOCK),
+    ////&server_key.create_trivial_radix(0, NUM_BLOCK),
     //p,
     //&server_key,
     //);
@@ -161,18 +166,42 @@ fn main() {
     //format(26),
     //format(55),
     //format(1),
+    ////format(0),
+    ////format(0),
+    ////format(0),
     //format(x_dec),
     //format(y_dec),
     //format(z_dec)
     //);
     //println!("group double in {} s", elasped.as_secs());
 
-    let x_dec = 206;
-    let y_dec = 103;
-    let z_dec = 192;
-    let x_new = client_key.encrypt_radix(x_dec, NUM_BLOCK);
-    let y_new = client_key.encrypt_radix(y_dec, NUM_BLOCK);
-    let z_new = client_key.encrypt_radix(z_dec, NUM_BLOCK);
+    let now = Instant::now();
+    let mul: Integer = 234;
+    let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
+        &ct_x,
+        &ct_y,
+        &server_key.create_trivial_radix(1, NUM_BLOCK),
+        &client_key.encrypt_radix(mul, NUM_BLOCK),
+        p,
+        &server_key,
+        &client_key,
+    );
+    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    let elasped = now.elapsed();
+    println!(
+        "{},{},{} * {} -> {},{},{}",
+        format(x),
+        format(y),
+        format(1),
+        format(mul),
+        format(x_dec),
+        format(y_dec),
+        format(z_dec)
+    );
+    println!("group scalar mul in {:.2} s", elasped.as_secs_f64());
+
     let now = Instant::now();
     let (x_aff, y_aff) =
         group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
