@@ -66,7 +66,10 @@ pub fn inverse_mod<
         r0 = r1;
         r1 = r;
 
-        println!("time used for bit {i} - {}s", now.elapsed().as_secs());
+        println!(
+            "Inverse mod bit {i} took {:.2}s",
+            now.elapsed().as_secs_f64()
+        );
     }
 
     // final result mod p
