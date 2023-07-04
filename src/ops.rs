@@ -37,13 +37,10 @@ pub fn inverse_mod<
     for i in 0..<P as Numeric>::BITS {
         let now = Instant::now();
 
-        let (mut q, mut r) =
-            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
-        rayon::join(
-            || server_key.full_propagate_parallelized(&mut q),
-            || server_key.full_propagate_parallelized(&mut r),
-        );
+        // q, r = r0 / r1
+        let (q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
         let tmp = t1.clone();
+        // t1 = t0 - q * t1
         t1 = server_key.smart_sub_parallelized(
             &mut t0.clone(),
             &mut server_key.smart_mul_parallelized(&mut q.clone(), &mut t1.clone()),
@@ -58,6 +55,7 @@ pub fn inverse_mod<
             .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut was_done);
         let mut done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
         server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
+        // inv = inv + done_now * t1
         let mut update = server_key.smart_mul_parallelized(&mut done_now, &mut t0);
         server_key.smart_add_assign_parallelized(&mut inv, &mut update);
         // update values
@@ -68,6 +66,8 @@ pub fn inverse_mod<
     }
 
     // final result mod p
+    // inverse can be **negative**. so we need to add p to make it positive
+    server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     let mut to_sub =

@@ -24,17 +24,17 @@ pub mod ops;
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
-    const NUM_BLOCK: usize = 4;
-    type Integer = u8;
-    let p: Integer = 251;
-    let x: Integer = 8;
-    let y: Integer = 45;
+    //const NUM_BLOCK: usize = 4;
+    //type Integer = u8;
+    //let p: Integer = 251;
+    //let x: Integer = 8;
+    //let y: Integer = 45;
 
-    //const NUM_BLOCK: usize = 8;
-    //type Integer = u16;
-    //let p: Integer = 65521;
-    //let x: Integer = 13897;
-    //let y: Integer = 62399;
+    const NUM_BLOCK: usize = 8;
+    type Integer = u16;
+    let p: Integer = 65521;
+    let x: Integer = 13897;
+    let y: Integer = 62399;
 
     //const NUM_BLOCK: usize = 128;
     //type Integer = U256;
