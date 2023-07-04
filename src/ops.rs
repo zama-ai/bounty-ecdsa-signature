@@ -35,7 +35,8 @@ pub fn inverse_mod<
     // euclidean algorithm
     // NB/2 best case and NB worst case
     for _ in 0..<P as Numeric>::BITS {
-        let (q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let (q, mut r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        server_key.full_propagate_parallelized(&mut r);
         let tmp = t1.clone();
         t1 = server_key.smart_sub_parallelized(
             &mut t0.clone(),
@@ -64,7 +65,6 @@ pub fn inverse_mod<
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
-    server_key.full_propagate_parallelized(&mut inv);
     inv
 }
 
@@ -83,7 +83,6 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
-    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     a_expanded
 }
@@ -180,6 +179,7 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
         &mut a_expanded,
         &mut server_key.create_trivial_radix(p, NB * 2),
     );
+    server_key.full_propagate_parallelized(&mut r);
     server_key.trim_radix_blocks_msb_assign(&mut r, NB);
     r
 }
@@ -416,41 +416,5 @@ mod tests {
         let e = mul_mod_naive(c, d);
         let enc_e = mul_mod::<NUM_BLOCK, _>(&enc_c, &enc_d, p, &server_key);
         assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
-    }
-
-    #[test]
-    fn zama_bug() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        const NUM_BLOCK: usize = 4;
-        let a: u128 = 248;
-        let b: u128 = 249;
-        let c: u128 = 250;
-        let d: u128 = 251;
-        let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
-        let enc_b = client_key.encrypt_radix(b, NUM_BLOCK);
-        let enc_c = client_key.encrypt_radix(c, NUM_BLOCK);
-        let enc_d = client_key.encrypt_radix(d, NUM_BLOCK);
-
-        let (q1, r1) = server_key.div_rem_parallelized(&enc_a, &enc_b);
-        let (q2, r2) = server_key.div_rem_parallelized(&enc_c, &enc_d);
-
-        println!("r1: {:?}", client_key.decrypt_radix::<u8>(&r1));
-        println!("r2: {:?}", client_key.decrypt_radix::<u8>(&r2));
-        println!("q1: {:?}", client_key.decrypt_radix::<u8>(&q1));
-        println!("q2: {:?}", client_key.decrypt_radix::<u8>(&q2));
-
-        let r1r2 = server_key.mul_parallelized(&r1, &r2);
-        println!("r1r2: {:?}", client_key.decrypt_radix::<u8>(&r1r2));
-
-        let r1_dec = client_key.decrypt_radix::<u8>(&r1);
-        let r2_dec = client_key.decrypt_radix::<u8>(&r2);
-        let r1_enc = client_key.encrypt_radix(r1_dec, NUM_BLOCK);
-        let r2_enc = client_key.encrypt_radix(r2_dec, NUM_BLOCK);
-
-        let r1r2_retry = server_key.mul_parallelized(&r1_enc, &r2_enc);
-        println!(
-            "r1r2_retry: {:?}",
-            client_key.decrypt_radix::<u8>(&r1r2_retry)
-        );
     }
 }
