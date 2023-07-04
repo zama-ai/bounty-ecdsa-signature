@@ -70,11 +70,12 @@ pub fn group_projective_add_affine<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
+    _x0: &RadixCiphertext,
+    _y0: &RadixCiphertext,
+    _z0: &RadixCiphertext,
     _x1: &RadixCiphertext,
     _y1: &RadixCiphertext,
     _z1: &RadixCiphertext,
-    _x2: &RadixCiphertext,
-    _y2: &RadixCiphertext,
     _p: P,
     _server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
@@ -85,16 +86,90 @@ pub fn group_projective_add_projective<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
-    _x1: &RadixCiphertext,
-    _y1: &RadixCiphertext,
-    _z1: &RadixCiphertext,
-    _x2: &RadixCiphertext,
-    _y2: &RadixCiphertext,
-    _z2: &RadixCiphertext,
-    _p: P,
-    _server_key: &ServerKey,
+    x0: &RadixCiphertext,
+    y0: &RadixCiphertext,
+    z0: &RadixCiphertext,
+    x1: &RadixCiphertext,
+    y1: &RadixCiphertext,
+    z1: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    todo!()
+    // t0 = y0 * z1
+    // t1 = y1 * z0
+    let (t0, t1) = rayon::join(
+        || mul_mod::<NB, _>(y0, z1, p, server_key),
+        || mul_mod::<NB, _>(y1, z0, p, server_key),
+    );
+    // u0 = x0 * z1
+    // u1 = x1 * z0
+    let (u0, u1) = rayon::join(
+        || mul_mod::<NB, _>(x0, z1, p, server_key),
+        || mul_mod::<NB, _>(x1, z0, p, server_key),
+    );
+    // u = u0 - u1
+    // t = t0 - t1
+    let (u, t) = rayon::join(
+        || sub_mod::<NB, _>(&u0, &u1, p, server_key),
+        || sub_mod::<NB, _>(&t0, &t1, p, server_key),
+    );
+    // u2 = u^2
+    // v = z0 * z1
+    let (u2, v) = rayon::join(
+        || square_mod::<NB, _>(&u, p, server_key),
+        || mul_mod::<NB, _>(z0, z1, p, server_key),
+    );
+    // w = t^2 * v - u2 * (u0 + u1)
+    let (t2v, u2u0u1) = rayon::join(
+        || mul_mod::<NB, _>(&square_mod::<NB, _>(&t, p, server_key), &v, p, server_key),
+        || {
+            mul_mod::<NB, _>(
+                &u2,
+                &add_mod::<NB, _>(&u0, &u1, p, server_key),
+                p,
+                server_key,
+            )
+        },
+    );
+    let w = sub_mod::<NB, _>(&t2v, &u2u0u1, p, server_key);
+    // u3 = u * u2
+    // x' = u * w
+    // y' = t * (u2 * u0 - w) - u3 * t0
+    // z' = u3 * v
+    let ((u3, x_prime), tu2u0w) = rayon::join(
+        || {
+            rayon::join(
+                || mul_mod::<NB, _>(&u, &u2, p, server_key),
+                || mul_mod::<NB, _>(&u, &w, p, server_key),
+            )
+        },
+        || {
+            mul_mod::<NB, _>(
+                &t,
+                &sub_mod::<NB, _>(
+                    &mul_mod::<NB, _>(&u2, &u0, p, server_key),
+                    &w,
+                    p,
+                    server_key,
+                ),
+                p,
+                server_key,
+            )
+        },
+    );
+    let (y_prime, z_prime) = rayon::join(
+        || {
+            sub_mod::<NB, _>(
+                &tu2u0w,
+                &mul_mod::<NB, _>(&u3, &t0, p, server_key),
+                p,
+                server_key,
+            )
+        },
+        || mul_mod::<NB, _>(&u3, &v, p, server_key),
+    );
+
+    (x_prime, y_prime, z_prime)
 }
 
 pub fn group_projective_into_affine<
@@ -106,8 +181,10 @@ pub fn group_projective_into_affine<
     z: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
+    client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
+    println!("z_inv: {}", format(client_key.decrypt_radix::<P>(&z_inv)));
 
     rayon::join(
         || mul_mod::<NB, _>(&x, &z_inv, p, server_key),
