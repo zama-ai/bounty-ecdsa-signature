@@ -174,14 +174,8 @@ fn main() {
     let y_new = client_key.encrypt_radix(y_dec, NUM_BLOCK);
     let z_new = client_key.encrypt_radix(z_dec, NUM_BLOCK);
     let now = Instant::now();
-    let (x_aff, y_aff) = group_projective_into_affine::<NUM_BLOCK, _>(
-        &x_new,
-        &y_new,
-        &z_new,
-        p,
-        &server_key,
-        &client_key,
-    );
+    let (x_aff, y_aff) =
+        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
     let elasped = now.elapsed();
     println!(
         "{},{},{} -> {},{}",

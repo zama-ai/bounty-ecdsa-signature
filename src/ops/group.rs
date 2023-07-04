@@ -181,10 +181,8 @@ pub fn group_projective_into_affine<
     z: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
-    client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
-    println!("z_inv: {}", format(client_key.decrypt_radix::<P>(&z_inv)));
 
     rayon::join(
         || mul_mod::<NB, _>(&x, &z_inv, p, server_key),

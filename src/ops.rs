@@ -16,7 +16,7 @@ pub mod group;
 // a^-1 mod p where a*a^-1 = 1 mod p
 pub fn inverse_mod<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     a: &RadixCiphertext,
     p: P,
@@ -71,6 +71,7 @@ pub fn inverse_mod<
 
     // final result mod p
     // inverse can be **negative**. so we need to add p to make it positive
+    server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut inv, 1);
     server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
@@ -78,6 +79,7 @@ pub fn inverse_mod<
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
+    server_key.trim_radix_blocks_msb_assign(&mut inv, 1);
     inv
 }
 
