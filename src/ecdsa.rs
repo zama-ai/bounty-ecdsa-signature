@@ -28,6 +28,7 @@ pub fn ecdsa_sign<
     server_key: &ServerKey,
     client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
+    // (x, y) = k * G
     let (x_proj, y_proj, z_proj) = group_projective_scalar_mul::<NB, _>(
         &server_key.create_trivial_radix(generator.0, NB),
         &server_key.create_trivial_radix(generator.0, NB),
@@ -38,6 +39,8 @@ pub fn ecdsa_sign<
         client_key,
     );
     let (x, _y) = group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
+    // r = x
+    // s = k^-1 * (m + r * sk)
     let k_inv = inverse_mod::<NB, _>(&nonce, p, server_key);
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
@@ -62,14 +65,18 @@ pub fn ecdsa_verify<
     server_key: &ServerKey,
     client_key: &ClientKey,
 ) -> RadixCiphertext {
+    // s^-1
     let s_inv = inverse_mod::<NB, _>(&signature.1, p, server_key);
+    // u1 = m * s^-1
     let u1 = mul_mod::<NB, _>(
         &s_inv,
         &server_key.create_trivial_radix(message, NB),
         p,
         server_key,
     );
+    // u2 = r * s^-1
     let u2 = mul_mod::<NB, _>(&s_inv, &signature.0, p, server_key);
+    // (x, y) = u1 * G + u2 * Q
     let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul::<NB, _>(
         &server_key.create_trivial_radix(generator.0, NB),
         &server_key.create_trivial_radix(generator.0, NB),
@@ -96,5 +103,6 @@ pub fn ecdsa_verify<
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
     let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x, &mut signature.0.clone());
 
+    // valid if z != 0 && x == r
     server_key.smart_bitand_parallelized(&mut is_z_zero, &mut is_x_eq_r)
 }
