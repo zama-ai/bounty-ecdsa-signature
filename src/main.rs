@@ -24,17 +24,17 @@ pub mod ops;
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
-    //const NUM_BLOCK: usize = 4;
-    //type Integer = u8;
-    //let p: Integer = 251;
-    //let x: Integer = 8;
-    //let y: Integer = 45;
+    const NUM_BLOCK: usize = 4;
+    type Integer = u8;
+    let p: Integer = 251;
+    let x: Integer = 8;
+    let y: Integer = 45;
 
-    const NUM_BLOCK: usize = 8;
-    type Integer = u16;
-    let p: Integer = 65521;
-    let x: Integer = 13897;
-    let y: Integer = 62399;
+    //const NUM_BLOCK: usize = 8;
+    //type Integer = u16;
+    //let p: Integer = 65521;
+    //let x: Integer = 13897;
+    //let y: Integer = 62399;
 
     //const NUM_BLOCK: usize = 128;
     //type Integer = U256;
@@ -89,29 +89,29 @@ fn main() {
     //);
     //println!("in {:.2} s\n", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let res = pow_mod::<NUM_BLOCK, _>(&ct_x, &ct_y, p, &server_key);
-    let elasped = now.elapsed();
-    println!(
-        "{}^{} % {} -> {}",
-        format(x),
-        format(y),
-        format(p),
-        format(client_key.decrypt_radix::<Integer>(&res)),
-    );
-    println!("in {:.2} s\n", elasped.as_secs_f32());
-
     //let now = Instant::now();
-    //let res = inverse_mod::<NUM_BLOCK, _>(&ct_x, p, &server_key);
-    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
-    //println!(
-    //"{}^-1 % {} -> {}",
-    //format(x),
-    //format(p),
-    //format(res_decoded)
-    //);
+    //let res = pow_mod::<NUM_BLOCK, _>(&ct_x, &ct_y, p, &server_key);
     //let elasped = now.elapsed();
+    //println!(
+    //"{}^{} % {} -> {}",
+    //format(x),
+    //format(y),
+    //format(p),
+    //format(client_key.decrypt_radix::<Integer>(&res)),
+    //);
     //println!("in {:.2} s\n", elasped.as_secs_f32());
+
+    let now = Instant::now();
+    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x, p, &server_key);
+    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    println!(
+        "{}^-1 % {} -> {}",
+        format(x),
+        format(p),
+        format(res_decoded)
+    );
+    let elasped = now.elapsed();
+    println!("in {:.2} s\n", elasped.as_secs_f32());
 
     //let now = Instant::now();
     //let (x_new, y_new, z_new) = group_projective_double::<NUM_BLOCK, _>(

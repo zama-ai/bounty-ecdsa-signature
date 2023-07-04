@@ -37,8 +37,12 @@ pub fn inverse_mod<
     for i in 0..<P as Numeric>::BITS {
         let now = Instant::now();
 
-        let (q, mut r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
-        server_key.full_propagate_parallelized(&mut r);
+        let (mut q, mut r) =
+            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        rayon::join(
+            || server_key.full_propagate_parallelized(&mut q),
+            || server_key.full_propagate_parallelized(&mut r),
+        );
         let tmp = t1.clone();
         t1 = server_key.smart_sub_parallelized(
             &mut t0.clone(),
