@@ -10,7 +10,8 @@ use tfhe::{
 };
 
 use crate::{
-    helper::format,
+    ecdsa::ecdsa_sign,
+    helper::{format, u256_from_decimal_string},
     ops::{
         add_mod,
         group::{
@@ -28,11 +29,56 @@ pub mod ops;
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
-    const NUM_BLOCK: usize = 4;
-    type Integer = u8;
-    let p: Integer = 251;
-    let x: Integer = 8;
-    let y: Integer = 45;
+    const NUM_BLOCK: usize = 128;
+    type Integer = U256;
+    let p: Integer = u256_from_decimal_string(
+        "115792089237316195423570985008687907853269984665640564039457584007908834671663",
+    );
+    let g_x: Integer = u256_from_decimal_string(
+        "55066263022277343669578718895168534326250603453777594175500187360389116729240",
+    );
+    let g_y: Integer = u256_from_decimal_string(
+        "32670510020758816978083085130507043184471273380659243275938904335757337482424",
+    );
+    let secret_key: Integer = u256_from_decimal_string(
+        "50374736940266874356472946887032805385643216083156316185256796863771578718026",
+    );
+    let nonce: Integer = u256_from_decimal_string(
+        "31534706826920421062170617943943122326357919410239174025491525139969337821575",
+    );
+    let message: Integer = u256_from_decimal_string(
+        "85842141585962005810830452070980593281629797958423199730619494346446023220882",
+    );
+
+    let generator = (g_x, g_y);
+    let secret_key_enc = client_key.encrypt_radix(secret_key, NUM_BLOCK);
+    let nonce_enc = client_key.encrypt_radix(nonce, NUM_BLOCK);
+    let now = Instant::now();
+    println!("Start ecdsa signing");
+    let (r, s) = ecdsa_sign::<NUM_BLOCK, _>(
+        &secret_key_enc,
+        &nonce_enc,
+        message,
+        generator,
+        p,
+        &server_key,
+        &client_key,
+    );
+    let elasped = now.elapsed();
+    println!(
+        "Signed message {} with {} and got signature r = {}, s = {}",
+        format(message),
+        format(secret_key),
+        format(client_key.decrypt_radix::<Integer>(&r)),
+        format(client_key.decrypt_radix::<Integer>(&s))
+    );
+    println!("Signed in {:.2} s\n", elasped.as_secs_f32());
+
+    //const NUM_BLOCK: usize = 4;
+    //type Integer = u8;
+    //let p: Integer = 251;
+    //let x: Integer = 8;
+    //let y: Integer = 45;
 
     //const NUM_BLOCK: usize = 8;
     //type Integer = u16;
@@ -60,11 +106,11 @@ fn main() {
     //msg % p
     //};
 
-    let ct_x = client_key.encrypt_radix(x, NUM_BLOCK);
-    let ct_y = client_key.encrypt_radix(y, NUM_BLOCK);
+    //let ct_x = client_key.encrypt_radix(x, NUM_BLOCK);
+    //let ct_y = client_key.encrypt_radix(y, NUM_BLOCK);
     //let ct_z = client_key.encrypt_radix(z, NUM_BLOCK);
-    assert_eq!(x, client_key.decrypt_radix::<Integer>(&ct_x));
-    assert_eq!(y, client_key.decrypt_radix::<Integer>(&ct_y));
+    //assert_eq!(x, client_key.decrypt_radix::<Integer>(&ct_x));
+    //assert_eq!(y, client_key.decrypt_radix::<Integer>(&ct_y));
     //assert_eq!(z, client_key.decrypt_radix::<Integer>(&ct_z));
 
     //let now = Instant::now();
@@ -175,44 +221,44 @@ fn main() {
     //);
     //println!("group double in {} s", elasped.as_secs());
 
-    let now = Instant::now();
-    let mul: Integer = 234;
-    let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
-        &ct_x,
-        &ct_y,
-        &server_key.create_trivial_radix(1, NUM_BLOCK),
-        &client_key.encrypt_radix(mul, NUM_BLOCK),
-        p,
-        &server_key,
-        &client_key,
-    );
-    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    let elasped = now.elapsed();
-    println!(
-        "{},{},{} * {} -> {},{},{}",
-        format(x),
-        format(y),
-        format(1),
-        format(mul),
-        format(x_dec),
-        format(y_dec),
-        format(z_dec)
-    );
-    println!("group scalar mul in {:.2} s", elasped.as_secs_f64());
+    //let now = Instant::now();
+    //let mul: Integer = 234;
+    //let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
+    //&ct_x,
+    //&ct_y,
+    //&server_key.create_trivial_radix(1, NUM_BLOCK),
+    //&client_key.encrypt_radix(mul, NUM_BLOCK),
+    //p,
+    //&server_key,
+    //&client_key,
+    //);
+    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    //let elasped = now.elapsed();
+    //println!(
+    //"{},{},{} * {} -> {},{},{}",
+    //format(x),
+    //format(y),
+    //format(1),
+    //format(mul),
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec)
+    //);
+    //println!("group scalar mul in {:.2} s", elasped.as_secs_f64());
 
-    let now = Instant::now();
-    let (x_aff, y_aff) =
-        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-    let elasped = now.elapsed();
-    println!(
-        "{},{},{} -> {},{}",
-        format(x_dec),
-        format(y_dec),
-        format(z_dec),
-        format(client_key.decrypt_radix::<Integer>(&x_aff)),
-        format(client_key.decrypt_radix::<Integer>(&y_aff))
-    );
-    println!("group projective into affine in {}s", elasped.as_secs());
+    //let now = Instant::now();
+    //let (x_aff, y_aff) =
+    //group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+    //let elasped = now.elapsed();
+    //println!(
+    //"{},{},{} -> {},{}",
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec),
+    //format(client_key.decrypt_radix::<Integer>(&x_aff)),
+    //format(client_key.decrypt_radix::<Integer>(&y_aff))
+    //);
+    //println!("group projective into affine in {}s", elasped.as_secs());
 }

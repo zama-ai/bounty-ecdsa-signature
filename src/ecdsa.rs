@@ -8,12 +8,16 @@ use tfhe::{
     },
 };
 
-use crate::ops::{
-    add_mod,
-    group::{
-        group_projective_add_projective, group_projective_into_affine, group_projective_scalar_mul,
+use crate::{
+    helper::format,
+    ops::{
+        add_mod,
+        group::{
+            group_projective_add_projective, group_projective_into_affine,
+            group_projective_scalar_mul,
+        },
+        inverse_mod, mul_mod,
     },
-    inverse_mod, mul_mod,
 };
 
 pub fn ecdsa_sign<
@@ -29,6 +33,7 @@ pub fn ecdsa_sign<
     client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     // (x, y) = k * G
+    println!("Calculating (x, y) = k * G");
     let (x_proj, y_proj, z_proj) = group_projective_scalar_mul::<NB, _>(
         &server_key.create_trivial_radix(generator.0, NB),
         &server_key.create_trivial_radix(generator.0, NB),
@@ -38,10 +43,14 @@ pub fn ecdsa_sign<
         server_key,
         client_key,
     );
-    let (x, _y) = group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
+    let (x, y) = group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
+    println!("x,r = {}", format(client_key.decrypt_radix::<P>(&x)));
+    println!("y = {}", format(client_key.decrypt_radix::<P>(&y)));
+
     // r = x
     // s = k^-1 * (m + r * sk)
     let k_inv = inverse_mod::<NB, _>(&nonce, p, server_key);
+    println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
         &mul_mod::<NB, _>(&x, &secret_key, p, server_key),
@@ -49,6 +58,7 @@ pub fn ecdsa_sign<
         server_key,
     );
     let s = mul_mod::<NB, _>(&k_inv, &mrsk, p, server_key);
+    println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
 
     (x, s)
 }
