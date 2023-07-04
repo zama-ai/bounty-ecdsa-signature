@@ -34,7 +34,9 @@ pub fn inverse_mod<
 
     // euclidean algorithm
     // NB/2 best case and NB worst case
-    for _ in 0..<P as Numeric>::BITS {
+    for i in 0..<P as Numeric>::BITS {
+        let now = Instant::now();
+
         let (q, mut r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
         server_key.full_propagate_parallelized(&mut r);
         let tmp = t1.clone();
@@ -57,6 +59,8 @@ pub fn inverse_mod<
         // update values
         r0 = r1;
         r1 = r;
+
+        println!("time used for bit {i} - {}s", now.elapsed().as_secs());
     }
 
     // final result mod p
@@ -162,7 +166,7 @@ pub fn mul_mod_bitwise<
             },
         );
 
-        println!("time used for bit {i} - {}s", now.elapsed().as_secs());
+        println!("inverse bit {i} took {:.2}s", now.elapsed().as_secs_f32());
     }
 
     add_mod::<NB, _>(&res, &to_add_later, p, server_key)
