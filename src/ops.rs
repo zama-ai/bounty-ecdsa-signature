@@ -287,7 +287,7 @@ mod tests {
 
     use crate::{
         helper::format,
-        ops::{double_mod, mul_mod_constant},
+        ops::{add_mod, double_mod, mul_mod, mul_mod_constant, sub_mod},
     };
 
     #[test]
@@ -313,24 +313,144 @@ mod tests {
     }
 
     #[test]
-    fn correct_pow_mod() {
-        type Integer = u128;
-        let p: Integer = 251;
-        let x: Integer = 199;
-        let y: Integer = 81;
+    fn correct_add_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
 
-        let mut base = x;
-        let mut exponent = y;
-        let mut res = <Integer as Numeric>::ONE;
+        let a: u128 = 248;
+        let b: u128 = 249;
+        let c: u128 = (a + b) % p as u128;
+        let enc_c = add_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
 
-        for _ in 0..<Integer as Numeric>::BITS {
-            let bit = exponent & 1;
-            let tmp = bit * base + 1 - bit;
-            res = res * tmp % p;
-            base = (base * base) % p;
-            exponent >>= 1;
-        }
+        let d = (c + c) % p as u128;
+        let enc_d = add_mod::<NUM_BLOCK, _>(&enc_c, &enc_c, p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
 
-        println!("Result: {}", res);
+        let e = (c + a) % p as u128;
+        let enc_e = add_mod::<NUM_BLOCK, _>(
+            &enc_c,
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+
+        let f = (e + b) % p as u128;
+        let enc_f = add_mod::<NUM_BLOCK, _>(
+            &enc_e,
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(f as u8, client_key.decrypt_radix::<u8>(&enc_f));
+    }
+
+    #[test]
+    fn correct_sub_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+
+        let sub_mod_naive = |a: u128, b: u128| (a + p as u128 - b) % p as u128;
+
+        let a: u128 = 248;
+        let b: u128 = 249;
+        let c: u128 = sub_mod_naive(a, b);
+        let enc_c = sub_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = sub_mod_naive(c, b);
+        let enc_d = sub_mod::<NUM_BLOCK, _>(
+            &enc_c,
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+
+        let e = sub_mod_naive(c, d);
+        let enc_e = sub_mod::<NUM_BLOCK, _>(&enc_c, &enc_d, p, &server_key);
+        assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+    }
+
+    #[test]
+    fn correct_mul_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+
+        let mul_mod_naive = |a: u128, b: u128| (a * b) % p as u128;
+
+        let a: u128 = 248;
+        let b: u128 = 249;
+        let c: u128 = mul_mod_naive(a, b);
+        let enc_c = mul_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = mul_mod_naive(c, b);
+        let enc_d = mul_mod::<NUM_BLOCK, _>(
+            &enc_c,
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+
+        let e = mul_mod_naive(c, d);
+        let enc_e = mul_mod::<NUM_BLOCK, _>(&enc_c, &enc_d, p, &server_key);
+        assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+    }
+
+    #[test]
+    fn zama_bug() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let a: u128 = 248;
+        let b: u128 = 249;
+        let c: u128 = 250;
+        let d: u128 = 251;
+        let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
+        let enc_b = client_key.encrypt_radix(b, NUM_BLOCK);
+        let enc_c = client_key.encrypt_radix(c, NUM_BLOCK);
+        let enc_d = client_key.encrypt_radix(d, NUM_BLOCK);
+
+        let (q1, r1) = server_key.div_rem_parallelized(&enc_a, &enc_b);
+        let (q2, r2) = server_key.div_rem_parallelized(&enc_c, &enc_d);
+
+        println!("r1: {:?}", client_key.decrypt_radix::<u8>(&r1));
+        println!("r2: {:?}", client_key.decrypt_radix::<u8>(&r2));
+        println!("q1: {:?}", client_key.decrypt_radix::<u8>(&q1));
+        println!("q2: {:?}", client_key.decrypt_radix::<u8>(&q2));
+
+        let r1r2 = server_key.mul_parallelized(&r1, &r2);
+        println!("r1r2: {:?}", client_key.decrypt_radix::<u8>(&r1r2));
+
+        let r1_dec = client_key.decrypt_radix::<u8>(&r1);
+        let r2_dec = client_key.decrypt_radix::<u8>(&r2);
+        let r1_enc = client_key.encrypt_radix(r1_dec, NUM_BLOCK);
+        let r2_enc = client_key.encrypt_radix(r2_dec, NUM_BLOCK);
+
+        let r1r2_retry = server_key.mul_parallelized(&r1_enc, &r2_enc);
+        println!(
+            "r1r2_retry: {:?}",
+            client_key.decrypt_radix::<u8>(&r1r2_retry)
+        );
     }
 }
