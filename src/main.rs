@@ -27,9 +27,9 @@ fn main() {
     const NUM_BLOCK: usize = 4;
     type Integer = u8;
     let p: Integer = 251;
-    let x: Integer = 8;
-    let y: Integer = 45;
-    let z: Integer = 1;
+    let x: Integer = 191;
+    let y: Integer = 232;
+    let z: Integer = 90;
 
     //const NUM_BLOCK: usize = 128;
     //type Integer = U256;
@@ -113,32 +113,32 @@ fn main() {
     //);
     //println!("in {} s\n", elasped.as_secs());
 
-    let now = Instant::now();
-    let (x_new, y_new, z_new) =
-        group_projective_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
-    let elasped = now.elapsed();
-    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    println!(
-        "{},{},{} * 2 -> {},{},{}",
-        format(x),
-        format(y),
-        format(z),
-        format(x_dec),
-        format(y_dec),
-        format(z_dec)
-    );
-    println!("group double in {} s", elasped.as_secs());
+    //let now = Instant::now();
+    //let (x_new, y_new, z_new) =
+    //group_projective_double::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
+    //let elasped = now.elapsed();
+    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    //println!(
+    //"{},{},{} * 2 -> {},{},{}",
+    //format(x),
+    //format(y),
+    //format(z),
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec)
+    //);
+    //println!("group double in {} s", elasped.as_secs());
     let now = Instant::now();
     let (x_aff, y_aff) =
-        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+        group_projective_into_affine::<NUM_BLOCK, _>(&ct_x, &ct_y, &ct_z, p, &server_key);
     let elasped = now.elapsed();
     println!(
         "{},{},{} -> {},{}",
-        format(x_dec),
-        format(y_dec),
-        format(z_dec),
+        format(x),
+        format(y),
+        format(z),
         format(client_key.decrypt_radix::<Integer>(&x_aff)),
         format(client_key.decrypt_radix::<Integer>(&y_aff))
     );

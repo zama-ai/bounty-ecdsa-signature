@@ -160,6 +160,7 @@ pub fn group_projective_into_affine<
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
     let z_inv2 = square_mod::<NB, _>(&z_inv, p, server_key);
     let z_inv3 = mul_mod::<NB, _>(&z_inv2, &z_inv, p, server_key);
+
     rayon::join(
         || mul_mod::<NB, _>(&x, &z_inv2, p, server_key),
         || mul_mod::<NB, _>(&y, &z_inv3, p, server_key),

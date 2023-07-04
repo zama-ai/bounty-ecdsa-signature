@@ -58,14 +58,14 @@ pub fn inverse_mod<
         r1 = r;
     }
 
-    // final result
-    let mut tmp = server_key.smart_scalar_add_parallelized(&mut inv, p);
-    let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut tmp, p);
+    // final result mod p
+    let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
-    server_key.smart_sub_assign_parallelized(&mut tmp, &mut to_sub);
-    tmp
+    server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut inv);
+    inv
 }
 
 /// a + b mod p
@@ -83,6 +83,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     a_expanded
 }
