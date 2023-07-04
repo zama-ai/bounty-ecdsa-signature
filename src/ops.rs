@@ -65,6 +65,7 @@ pub fn inverse_mod<
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut inv);
     inv
 }
 
@@ -83,6 +84,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     a_expanded
 }
@@ -101,6 +103,7 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     a_expanded
 }
@@ -175,6 +178,7 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     // assume large p and a,b < p
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
+    server_key.full_propagate_parallelized(&mut a_expanded);
     let (_q, mut r) = server_key.smart_div_rem_parallelized(
         &mut a_expanded,
         &mut server_key.create_trivial_radix(p, NB * 2),
@@ -416,5 +420,13 @@ mod tests {
         let e = mul_mod_naive(c, d);
         let enc_e = mul_mod::<NUM_BLOCK, _>(&enc_c, &enc_d, p, &server_key);
         assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+
+        let f = mul_mod_naive(e, e);
+        let enc_f = mul_mod::<NUM_BLOCK, _>(&enc_e, &enc_e, p, &server_key);
+        assert_eq!(f as u8, client_key.decrypt_radix::<u8>(&enc_f));
+
+        let g = mul_mod_naive(f, f);
+        let enc_g = mul_mod::<NUM_BLOCK, _>(&enc_f, &enc_f, p, &server_key);
+        assert_eq!(g as u8, client_key.decrypt_radix::<u8>(&enc_g));
     }
 }
