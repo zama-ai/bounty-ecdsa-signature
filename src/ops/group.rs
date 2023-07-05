@@ -322,7 +322,7 @@ pub fn group_projective_scalar_mul<
             || server_key.scalar_bitand_parallelized(&mut scalar.clone(), 1),
             || server_key.scalar_right_shift_parallelized(&mut scalar.clone(), 1),
         );
-        server_key.trim_radix_blocks_msb(&mut bit, NB - 1);
+        server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
         scalar = new_scalar;
         ((res_x, res_y, res_z), (tmp_x, tmp_y, tmp_z)) = rayon::join(
             || {
