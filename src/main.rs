@@ -37,62 +37,61 @@ fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
     *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
 
-    //const NUM_BLOCK: usize = 128;
-    //type Integer = U256;
-    //let q: Integer = u256_from_decimal_string(
-    //"115792089237316195423570985008687907853269984665640564039457584007908834671663",
-    //);
-    //let r: Integer = u256_from_decimal_string(
-    //"115792089237316195423570985008687907852837564279074904382605163141518161494337",
-    //);
-    //let g_x: Integer = u256_from_decimal_string(
-    //"55066263022277343669578718895168534326250603453777594175500187360389116729240",
-    //);
-    //let g_y: Integer = u256_from_decimal_string(
-    //"32670510020758816978083085130507043184471273380659243275938904335757337482424",
-    //);
-    //let secret_key: Integer = u256_from_decimal_string(
-    //"50374736940266874356472946887032805385643216083156316185256796863771578718026",
-    //);
-    //let nonce: Integer = u256_from_decimal_string(
-    //"31534706826920421062170617943943122326357919410239174025491525139969337821575",
-    //);
-    //let message: Integer = u256_from_decimal_string(
-    //"85842141585962005810830452070980593281629797958423199730619494346446023220882",
-    //);
+    const NUM_BLOCK: usize = 128;
+    type Integer = U256;
+    let q: Integer = u256_from_decimal_string(
+        "115792089237316195423570985008687907853269984665640564039457584007908834671663",
+    );
+    let r: Integer = u256_from_decimal_string(
+        "115792089237316195423570985008687907852837564279074904382605163141518161494337",
+    );
+    let g_x: Integer = u256_from_decimal_string(
+        "55066263022277343669578718895168534326250603453777594175500187360389116729240",
+    );
+    let g_y: Integer = u256_from_decimal_string(
+        "32670510020758816978083085130507043184471273380659243275938904335757337482424",
+    );
+    let secret_key: Integer = u256_from_decimal_string(
+        "50374736940266874356472946887032805385643216083156316185256796863771578718026",
+    );
+    let nonce: Integer = u256_from_decimal_string(
+        "31534706826920421062170617943943122326357919410239174025491525139969337821575",
+    );
+    let message: Integer = u256_from_decimal_string(
+        "85842141585962005810830452070980593281629797958423199730619494346446023220882",
+    );
 
-    //let generator = (g_x, g_y);
-    //let secret_key_enc = client_key.encrypt_radix(secret_key, NUM_BLOCK);
-    //let nonce_enc = client_key.encrypt_radix(nonce, NUM_BLOCK);
-    //let now = Instant::now();
-    //println!("Start ecdsa signing");
-    //let (r, s) = ecdsa_sign::<NUM_BLOCK, _>(
-    //&secret_key_enc,
-    //&nonce_enc,
-    //message,
-    //generator,
-    //q,
-    //r,
-    //&server_key,
-    //&client_key,
-    //);
-    //let elasped = now.elapsed();
-    //println!(
-    //"Signed message {} with {} and got signature r = {}, s = {}",
-    //format(message),
-    //format(secret_key),
-    //format(client_key.decrypt_radix::<Integer>(&r)),
-    //format(client_key.decrypt_radix::<Integer>(&s))
-    //);
-    //println!("Signed in {:.2} s\n", elasped.as_secs_f32());
+    let generator = (g_x, g_y);
+    let secret_key_enc = client_key.encrypt_radix(secret_key, NUM_BLOCK);
+    let nonce_enc = client_key.encrypt_radix(nonce, NUM_BLOCK);
+    let now = Instant::now();
+    println!("Start ecdsa signing");
+    let (r, s) = ecdsa_sign::<NUM_BLOCK, _>(
+        &secret_key_enc,
+        &nonce_enc,
+        message,
+        generator,
+        q,
+        r,
+        &server_key,
+    );
+    let elasped = now.elapsed();
+    println!(
+        "Signed message {} with {} and got signature r = {}, s = {}",
+        format(message),
+        format(secret_key),
+        format(client_key.decrypt_radix::<Integer>(&r)),
+        format(client_key.decrypt_radix::<Integer>(&s))
+    );
+    println!("Signed in {:.2} s\n", elasped.as_secs_f32());
 
-    const NUM_BLOCK: usize = 4;
-    type Integer = u8;
-    let p: Integer = 251;
-    let x1: Integer = 8;
-    let y1: Integer = 45;
-    let x2: Integer = 26;
-    let y2: Integer = 55;
+    //const NUM_BLOCK: usize = 4;
+    //type Integer = u8;
+    //let p: Integer = 251;
+    //let x1: Integer = 8;
+    //let y1: Integer = 45;
+    //let x2: Integer = 26;
+    //let y2: Integer = 55;
 
     //const NUM_BLOCK: usize = 8;
     //type Integer = u16;
@@ -131,14 +130,14 @@ fn main() {
     //.unwrap()
     //};
 
-    let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
-    let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
-    let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
-    let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
-    assert_eq!(x1, client_key.decrypt_radix::<Integer>(&ct_x1));
-    assert_eq!(y1, client_key.decrypt_radix::<Integer>(&ct_y1));
-    assert_eq!(x2, client_key.decrypt_radix::<Integer>(&ct_x2));
-    assert_eq!(y2, client_key.decrypt_radix::<Integer>(&ct_y2));
+    //let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
+    //let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
+    //let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
+    //let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
+    //assert_eq!(x1, client_key.decrypt_radix::<Integer>(&ct_x1));
+    //assert_eq!(y1, client_key.decrypt_radix::<Integer>(&ct_y1));
+    //assert_eq!(x2, client_key.decrypt_radix::<Integer>(&ct_x2));
+    //assert_eq!(y2, client_key.decrypt_radix::<Integer>(&ct_y2));
 
     //let now = Instant::now();
     //let res = add_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
