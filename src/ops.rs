@@ -40,7 +40,7 @@ pub fn multi_add_mod<
         server_key.smart_add_assign_parallelized(&mut sum, &mut a[i].clone());
     }
     // only check with p*2^i from high to low
-    for i in (1..le).rev() {
+    for i in (0..le).rev() {
         // to_check = p * 2^i = p << i
         let mut to_check = server_key.create_trivial_radix(p, NB + extend);
         server_key.scalar_left_shift_assign_parallelized(&mut to_check, i as u64);
