@@ -89,6 +89,89 @@ pub fn modulo<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> +
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
+pub fn inverse_mod_trim<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    a: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    // implement extended euclidean algorithm
+    // assume a < p. (no check)
+    let a = a.clone();
+    let mut r0 = server_key.create_trivial_radix(p, NB);
+    let mut r1 = a.clone();
+    let mut was_done = server_key.create_trivial_radix(0, 1);
+    let mut t0 = server_key.create_trivial_radix(0, NB);
+    let mut t1 = server_key.create_trivial_radix(1, NB);
+    let mut inv = server_key.create_trivial_radix(0, NB);
+    let mut trim = 0;
+    // euclidean algorithm
+    // NB/2 best case and NB worst case
+    for i in 0..<P as Numeric>::BITS {
+        let now = Instant::now();
+        // q, r = r0 / r1
+        let (mut q, mut r) =
+            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        rayon::join(
+            || server_key.full_propagate_parallelized(&mut q),
+            || server_key.full_propagate_parallelized(&mut r),
+        );
+        q = server_key.extend_radix_with_trivial_zero_blocks_msb(&mut q, trim);
+        let full_r = server_key.extend_radix_with_trivial_zero_blocks_msb(&mut r, trim);
+
+        let tmp = t1.clone();
+        // t1 = t0 - q * t1
+        t1 = server_key.smart_sub_parallelized(
+            &mut t0.clone(),
+            &mut server_key.smart_mul_parallelized(&mut q.clone(), &mut t1.clone()),
+        );
+        t0 = tmp;
+        // is_done = r =? 0
+        // never_done = 1 - is_done
+        // was_done = was_done | is_done
+        // done_now = is_done & never_done
+        let mut done = server_key.smart_scalar_eq_parallelized(&mut full_r.clone(), 0);
+        let mut never_done = server_key
+            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut was_done);
+        let mut done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
+        server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
+        // inv = inv + done_now * t1
+        let mut update = server_key.smart_mul_parallelized(&mut done_now, &mut t0);
+        server_key.smart_add_assign_parallelized(&mut inv, &mut update);
+
+        // update values
+        if (i % 2 == 0) & (i != 0) {
+            r0 = server_key.trim_radix_blocks_msb(&r1.clone(), 1);
+            r1 = server_key.trim_radix_blocks_msb(&r.clone(), 1);
+            trim = trim + 1;
+        } else {
+            r0 = r1.clone();
+            r1 = r.clone();
+        }
+
+        println!(
+            "Inverse mod bit {i} took {:.2}s",
+            now.elapsed().as_secs_f64()
+        );
+    }
+
+    // final result mod p
+    // inverse can be **negative**. so we need to add p to make it positive
+    server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut inv, 1);
+    server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
+    let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    let mut to_sub =
+        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+    server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut inv);
+    server_key.trim_radix_blocks_msb_assign(&mut inv, 1);
+    inv
+}
+
+/// a^-1 mod p where a*a^-1 = 1 mod p
 pub fn inverse_mod<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
