@@ -13,7 +13,40 @@ use crate::helper::format;
 
 pub mod group;
 
-// a^-1 mod p where a*a^-1 = 1 mod p
+/// turn x mod a to x mod b
+/// only if a > b and a < 2b
+pub fn modulo_fast<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: &RadixCiphertext,
+    b: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let mut x = x.clone();
+    let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    let mut to_sub =
+        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
+    server_key.smart_sub_assign_parallelized(&mut x, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut x);
+    x
+}
+
+/// turn x mod a to x mod b
+/// for all cases, require 1 division
+pub fn modulo<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+    x: &RadixCiphertext,
+    b: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let (_q, mut r) = server_key
+        .smart_div_rem_parallelized(&mut x.clone(), &mut server_key.create_trivial_radix(b, NB));
+    server_key.full_propagate_parallelized(&mut r);
+    r
+}
+
+/// a^-1 mod p where a*a^-1 = 1 mod p
 pub fn inverse_mod<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
