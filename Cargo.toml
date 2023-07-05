@@ -11,3 +11,4 @@ hex = "0.4.3"
 rand = "0.8.5"
 rayon = "1.7.0"
 tfhe = { git = "https://github.com/zama-ai/tfhe-rs", features = [ "boolean", "shortint", "integer", "internal-keycache"] }
+lazy_static = "1.4.0"

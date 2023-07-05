@@ -9,7 +9,7 @@ use tfhe::{
     },
 };
 
-use crate::helper::format;
+use crate::helper::{format, read_client_key};
 
 pub mod group;
 
@@ -174,7 +174,7 @@ pub fn inverse_mod_trim<
 /// a^-1 mod p where a*a^-1 = 1 mod p
 pub fn inverse_mod<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     a: &RadixCiphertext,
     p: P,

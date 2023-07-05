@@ -9,7 +9,7 @@ use tfhe::{
 };
 
 use crate::{
-    helper::format,
+    helper::{format, read_client_key},
     ops::{add_mod, double_mod, mul_mod, square_mod, sub_mod},
 };
 
@@ -281,7 +281,7 @@ pub fn group_projective_add_projective<
 
 pub fn group_projective_into_affine<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -307,7 +307,6 @@ pub fn group_projective_scalar_mul<
     scalar: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
-    client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();
@@ -348,24 +347,27 @@ pub fn group_projective_scalar_mul<
             },
             || group_projective_double::<NB, _>(&tmp_x, &tmp_y, &tmp_z, p, server_key),
         );
-        println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
-        println!(
-            "Res {},{},{}",
-            format(client_key.decrypt_radix::<P>(&res_x)),
-            format(client_key.decrypt_radix::<P>(&res_y)),
-            format(client_key.decrypt_radix::<P>(&res_z)),
-        );
-        println!(
-            "Tmp {},{},{}",
-            format(client_key.decrypt_radix::<P>(&tmp_x)),
-            format(client_key.decrypt_radix::<P>(&tmp_y)),
-            format(client_key.decrypt_radix::<P>(&tmp_z)),
-        );
-        println!(
-            "Scalar mul bit {} took {:.2}s",
-            i,
-            now.elapsed().as_secs_f32()
-        );
+
+        read_client_key(|client_key| {
+            println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
+            println!(
+                "Res {},{},{}",
+                format(client_key.decrypt_radix::<P>(&res_x)),
+                format(client_key.decrypt_radix::<P>(&res_y)),
+                format(client_key.decrypt_radix::<P>(&res_z)),
+            );
+            println!(
+                "Tmp {},{},{}",
+                format(client_key.decrypt_radix::<P>(&tmp_x)),
+                format(client_key.decrypt_radix::<P>(&tmp_y)),
+                format(client_key.decrypt_radix::<P>(&tmp_z)),
+            );
+            println!(
+                "Scalar mul bit {} took {:.2}s",
+                i,
+                now.elapsed().as_secs_f32()
+            );
+        });
     }
 
     (res_x, res_y, res_z)

@@ -1,8 +1,10 @@
 use num_bigint::BigInt;
 use tfhe::integer::{
     block_decomposition::{BlockDecomposer, DecomposableInto},
-    U256,
+    ClientKey, U256,
 };
+
+use crate::CLIENT_KEY;
 
 pub fn format<T: DecomposableInto<u8> + Copy>(a: T) -> String {
     BigInt::from_bytes_le(
@@ -21,6 +23,14 @@ pub fn u256_from_decimal_string(s: &str) -> U256 {
         res += (c as u8 - b'0').into();
     }
     res
+}
+
+pub fn read_client_key<F: FnOnce(&ClientKey)>(f: F) {
+    CLIENT_KEY
+        .read()
+        .unwrap()
+        .as_ref()
+        .inspect(|client_key| f(client_key));
 }
 
 #[cfg(test)]

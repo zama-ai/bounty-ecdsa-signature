@@ -9,7 +9,7 @@ use tfhe::{
 };
 
 use crate::{
-    helper::format,
+    helper::{format, read_client_key},
     ops::{
         add_mod,
         group::{
@@ -33,7 +33,6 @@ pub fn ecdsa_sign<
     q_modulo: P,
     r_modulo: P,
     server_key: &ServerKey,
-    client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     // (x, y) = k * G
     println!("Calculating (x, y) = k * G");
@@ -44,18 +43,20 @@ pub fn ecdsa_sign<
         &k,
         q_modulo,
         server_key,
-        client_key,
     );
     let (x, y) =
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
-    println!("x,r = {}", format(client_key.decrypt_radix::<P>(&x)));
-    println!("y = {}", format(client_key.decrypt_radix::<P>(&y)));
-
+    read_client_key(|client_key| {
+        println!("x = {}", format(client_key.decrypt_radix::<P>(&x)));
+        println!("y = {}", format(client_key.decrypt_radix::<P>(&y)));
+    });
     // r = x
     // s = k^-1 * (m + r * sk)
     let r = modulo::<NB, _>(&x, r_modulo, server_key);
     let k_inv = inverse_mod::<NB, _>(&k, r_modulo, server_key);
-    println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
+    read_client_key(|client_key| {
+        println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
+    });
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
         &mul_mod::<NB, _>(&r, &sk, r_modulo, server_key),
@@ -63,7 +64,10 @@ pub fn ecdsa_sign<
         server_key,
     );
     let s = mul_mod::<NB, _>(&k_inv, &mrsk, r_modulo, server_key);
-    println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
+    read_client_key(|client_key| {
+        println!("r = {}", format(client_key.decrypt_radix::<P>(&r)));
+        println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
+    });
 
     (r, s)
 }
@@ -78,7 +82,6 @@ pub fn ecdsa_verify<
     generator: (P, P),
     p: P,
     server_key: &ServerKey,
-    client_key: &ClientKey,
 ) -> RadixCiphertext {
     // s^-1
     let s_inv = inverse_mod::<NB, _>(&signature.1, p, server_key);
@@ -99,7 +102,6 @@ pub fn ecdsa_verify<
         &u1,
         p,
         server_key,
-        client_key,
     );
     let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul::<NB, _>(
         &public_key.0,
@@ -108,7 +110,6 @@ pub fn ecdsa_verify<
         &u2,
         p,
         server_key,
-        client_key,
     );
     let (x_proj, y_proj, mut z_proj) = group_projective_add_projective::<NB, _>(
         &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, p, server_key,
