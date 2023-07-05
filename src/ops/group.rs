@@ -15,7 +15,8 @@ use crate::{
 
 use super::inverse_mod;
 
-pub fn group_projective_zero<const NB: usize>(
+/// Projective point at infinity in homogeneous coordinates
+pub fn group_projective_zero_homogenous<const NB: usize>(
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
     (
@@ -149,7 +150,7 @@ pub fn group_projective_add_projective<
     // x' = u * w
     // y' = t * (u2 * u0 - w) - u3 * t0
     // z' = u3 * v
-    let ((u3, x_prime), tu2u0w) = rayon::join(
+    let ((u3, mut x_prime), tu2u0w) = rayon::join(
         || {
             rayon::join(
                 || mul_mod::<NB, _>(&u, &u2, p, server_key),
@@ -170,7 +171,7 @@ pub fn group_projective_add_projective<
             )
         },
     );
-    let (y_prime, z_prime) = rayon::join(
+    let (mut y_prime, mut z_prime) = rayon::join(
         || {
             sub_mod::<NB, _>(
                 &tu2u0w,
@@ -185,82 +186,61 @@ pub fn group_projective_add_projective<
     // z1'/z0' 0  1
     //    0    x' x1
     //    1    x0 x0
-    // x'' =  x' * is_z0_z1_non_zero + x0 * is_z1_zero_and_z0_non_zero + x1 * is_z0_zero
-    // y'' =  y' * is_z0_z1_non_zero + y0 * is_z1_zero_and_z0_non_zero + y1 * is_z0_zero
-    // z'' =  z' * is_z0_z1_non_zero + z0 * is_z1_zero_and_z0_non_zero + z1 * is_z0_zero
+    // x'' =  x' * is_z0_z1_non_zero + (x0 + x1) * not_is_z0_z1_non_zero
+    // y'' =  y' * is_z0_z1_non_zero + (y0 + y1) * not_is_z0_z1_non_zero
+    // z'' =  z' * is_z0_z1_non_zero + (z0 + z1) * not_is_z0_z1_non_zero
     let (mut is_z0_non_zero, mut is_z1_non_zero) = rayon::join(
         || server_key.smart_scalar_ne_parallelized(&mut z0.clone(), 0),
         || server_key.smart_scalar_ne_parallelized(&mut z1.clone(), 0),
     );
     server_key.trim_radix_blocks_msb_assign(&mut is_z0_non_zero, NB - 1);
     server_key.trim_radix_blocks_msb_assign(&mut is_z1_non_zero, NB - 1);
-    let (is_z0_zero, mut is_z1_zero) = rayon::join(
-        || {
-            server_key.smart_sub_parallelized(
-                &mut server_key.create_trivial_radix(1, 1),
-                &mut is_z0_non_zero,
-            )
-        },
-        || {
-            server_key.smart_sub_parallelized(
-                &mut server_key.create_trivial_radix(1, 1),
-                &mut is_z1_non_zero,
-            )
-        },
-    );
-    let is_z0_z1_non_zero =
+    let mut is_z0_z1_non_zero =
         server_key.smart_bitand_parallelized(&mut is_z0_non_zero, &mut is_z1_non_zero);
-    let is_z1_zero_and_z0_non_zero =
-        server_key.smart_bitand_parallelized(&mut is_z0_non_zero, &mut is_z1_zero);
-
-    let ((xp1, xp2), xp3) = rayon::join(
-        || {
-            rayon::join(
-                || mul_mod::<NB, _>(&x_prime, &is_z0_z1_non_zero, p, server_key),
-                || mul_mod::<NB, _>(&x0, &is_z1_zero_and_z0_non_zero, p, server_key),
-            )
-        },
-        || mul_mod::<NB, _>(&x1, &is_z0_zero, p, server_key),
-    );
-    let ((yp1, yp2), yp3) = rayon::join(
-        || {
-            rayon::join(
-                || mul_mod::<NB, _>(&y_prime, &is_z0_z1_non_zero, p, server_key),
-                || mul_mod::<NB, _>(&y0, &is_z1_zero_and_z0_non_zero, p, server_key),
-            )
-        },
-        || mul_mod::<NB, _>(&y1, &is_z0_zero, p, server_key),
-    );
-    let ((zp1, zp2), zp3) = rayon::join(
-        || {
-            rayon::join(
-                || mul_mod::<NB, _>(&z_prime, &is_z0_z1_non_zero, p, server_key),
-                || mul_mod::<NB, _>(&z0, &is_z1_zero_and_z0_non_zero, p, server_key),
-            )
-        },
-        || mul_mod::<NB, _>(&z1, &is_z0_zero, p, server_key),
+    let mut not_is_z0_z1_non_zero = server_key.smart_sub_parallelized(
+        &mut server_key.create_trivial_radix(1, 1),
+        &mut is_z0_z1_non_zero,
     );
 
-    (
-        add_mod::<NB, _>(
-            &add_mod::<NB, _>(&xp1, &xp2, p, server_key),
-            &xp3,
-            p,
-            server_key,
-        ),
-        add_mod::<NB, _>(
-            &add_mod::<NB, _>(&yp1, &yp2, p, server_key),
-            &yp3,
-            p,
-            server_key,
-        ),
-        add_mod::<NB, _>(
-            &add_mod::<NB, _>(&zp1, &zp2, p, server_key),
-            &zp3,
-            p,
-            server_key,
-        ),
-    )
+    let (mut xp1, mut xp2) = rayon::join(
+        || server_key.smart_mul_parallelized(&mut x_prime, &mut is_z0_z1_non_zero),
+        || {
+            server_key.smart_mul_parallelized(
+                &mut server_key.smart_add_parallelized(&mut x0.clone(), &mut x1.clone()),
+                &mut not_is_z0_z1_non_zero,
+            )
+        },
+    );
+    let (mut yp1, mut yp2) = rayon::join(
+        || server_key.smart_mul_parallelized(&mut y_prime, &mut is_z0_z1_non_zero),
+        || {
+            server_key.smart_mul_parallelized(
+                &mut server_key.smart_add_parallelized(&mut y0.clone(), &mut y1.clone()),
+                &mut not_is_z0_z1_non_zero,
+            )
+        },
+    );
+    let (mut zp1, mut zp2) = rayon::join(
+        || server_key.smart_mul_parallelized(&mut z_prime, &mut is_z0_z1_non_zero),
+        || {
+            server_key.smart_mul_parallelized(
+                &mut server_key.smart_add_parallelized(&mut z0.clone(), &mut z1.clone()),
+                &mut not_is_z0_z1_non_zero,
+            )
+        },
+    );
+
+    ((x_prime, y_prime), z_prime) = rayon::join(
+        || {
+            rayon::join(
+                || server_key.smart_add_parallelized(&mut xp1, &mut xp2),
+                || server_key.smart_add_parallelized(&mut yp1, &mut yp2),
+            )
+        },
+        || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
+    );
+
+    (x_prime, y_prime, z_prime)
 }
 
 pub fn group_projective_into_affine<
@@ -314,11 +294,17 @@ pub fn group_projective_scalar_mul<
                 let ((x_to_add, y_to_add), z_to_add) = rayon::join(
                     || {
                         rayon::join(
-                            || mul_mod::<NB, _>(&tmp_x, &bit, p, server_key),
-                            || mul_mod::<NB, _>(&tmp_y, &bit, p, server_key),
+                            || {
+                                server_key
+                                    .smart_mul_parallelized(&mut tmp_x.clone(), &mut bit.clone())
+                            },
+                            || {
+                                server_key
+                                    .smart_mul_parallelized(&mut tmp_y.clone(), &mut bit.clone())
+                            },
                         )
                     },
-                    || mul_mod::<NB, _>(&tmp_z, &bit, p, server_key),
+                    || server_key.smart_mul_parallelized(&mut tmp_z.clone(), &mut bit.clone()),
                 );
                 group_projective_add_projective::<NB, _>(
                     &res_x, &res_y, &res_z, &x_to_add, &y_to_add, &z_to_add, p, server_key,
