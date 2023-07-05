@@ -121,7 +121,7 @@ pub fn inverse_mod_trim<
     let mut trim = 0;
     // euclidean algorithm
     // NB/2 best case and NB worst case
-    for i in 0..<P as Numeric>::BITS {
+    for i in 0..(<P as Numeric>::BITS + 1) {
         let now = Instant::now();
         // q, r = r0 / r1
         let (mut q, mut r) =
@@ -134,6 +134,7 @@ pub fn inverse_mod_trim<
         let full_r = server_key.extend_radix_with_trivial_zero_blocks_msb(&mut r, trim);
 
         let tmp = t1.clone();
+
         // t1 = t0 - q * t1
         t1 = server_key.smart_sub_parallelized(
             &mut t0.clone(),
@@ -173,11 +174,16 @@ pub fn inverse_mod_trim<
 
     // final result mod p
     // inverse can be **negative**. so we need to add p to make it positive
+
     server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
+
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    let mut to_sub =
-        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, padded_nb - 1);
+
+    let mut to_sub = server_key.smart_mul_parallelized(
+        &mut server_key.create_trivial_radix(p, padded_nb),
+        &mut is_gt,
+    );
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
     inv
