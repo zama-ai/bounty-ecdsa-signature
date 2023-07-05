@@ -31,8 +31,11 @@ fn main() {
 
     const NUM_BLOCK: usize = 128;
     type Integer = U256;
-    let p: Integer = u256_from_decimal_string(
+    let q: Integer = u256_from_decimal_string(
         "115792089237316195423570985008687907853269984665640564039457584007908834671663",
+    );
+    let r: Integer = u256_from_decimal_string(
+        "115792089237316195423570985008687907852837564279074904382605163141518161494337",
     );
     let g_x: Integer = u256_from_decimal_string(
         "55066263022277343669578718895168534326250603453777594175500187360389116729240",
@@ -60,7 +63,8 @@ fn main() {
         &nonce_enc,
         message,
         generator,
-        p,
+        q,
+        r,
         &server_key,
         &client_key,
     );

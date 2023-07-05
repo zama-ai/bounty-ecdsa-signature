@@ -16,19 +16,22 @@ use crate::{
             group_projective_add_projective, group_projective_into_affine,
             group_projective_scalar_mul,
         },
-        inverse_mod, mul_mod,
+        inverse_mod, modulo, mul_mod,
     },
 };
 
+/// perform ECDSA signing on message `P` % `r` over secret key `secret_key` % `r` and nonce `k` % `r`
+/// with prime subgroup generator `x, y` % `q`
 pub fn ecdsa_sign<
     const NB: usize,
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
-    secret_key: &RadixCiphertext,
-    nonce: &RadixCiphertext,
+    sk: &RadixCiphertext,
+    k: &RadixCiphertext,
     message: P,
     generator: (P, P),
-    p: P,
+    q_modulo: P,
+    r_modulo: P,
     server_key: &ServerKey,
     client_key: &ClientKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
@@ -38,29 +41,31 @@ pub fn ecdsa_sign<
         &server_key.create_trivial_radix(generator.0, NB),
         &server_key.create_trivial_radix(generator.1, NB),
         &server_key.create_trivial_radix(1, NB),
-        &nonce,
-        p,
+        &k,
+        q_modulo,
         server_key,
         client_key,
     );
-    let (x, y) = group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
+    let (x, y) =
+        group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
     println!("x,r = {}", format(client_key.decrypt_radix::<P>(&x)));
     println!("y = {}", format(client_key.decrypt_radix::<P>(&y)));
 
     // r = x
     // s = k^-1 * (m + r * sk)
-    let k_inv = inverse_mod::<NB, _>(&nonce, p, server_key);
+    let r = modulo::<NB, _>(&x, r_modulo, server_key);
+    let k_inv = inverse_mod::<NB, _>(&k, r_modulo, server_key);
     println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
-        &mul_mod::<NB, _>(&x, &secret_key, p, server_key),
-        p,
+        &mul_mod::<NB, _>(&r, &sk, r_modulo, server_key),
+        r_modulo,
         server_key,
     );
-    let s = mul_mod::<NB, _>(&k_inv, &mrsk, p, server_key);
+    let s = mul_mod::<NB, _>(&k_inv, &mrsk, r_modulo, server_key);
     println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
 
-    (x, s)
+    (r, s)
 }
 
 pub fn ecdsa_verify<
