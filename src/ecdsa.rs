@@ -36,9 +36,9 @@ pub fn ecdsa_sign<
     println!("Calculating (x, y) = k * G");
     let (x_proj, y_proj, z_proj) = group_projective_scalar_mul::<NB, _>(
         &server_key.create_trivial_radix(generator.0, NB),
-        &server_key.create_trivial_radix(generator.0, NB),
+        &server_key.create_trivial_radix(generator.1, NB),
         &server_key.create_trivial_radix(1, NB),
-        &secret_key,
+        &nonce,
         p,
         server_key,
         client_key,
