@@ -97,15 +97,16 @@ pub fn inverse_mod_trim<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    // implement extended euclidean algorithm
+    let padded_nb = NB + 1;
+    // implement extended euclidean algorithm with trim bit
     // assume a < p. (no check)
-    let a = a.clone();
-    let mut r0 = server_key.create_trivial_radix(p, NB);
+    let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
+    let mut r0 = server_key.create_trivial_radix(p, padded_nb);
     let mut r1 = a.clone();
     let mut was_done = server_key.create_trivial_radix(0, 1);
-    let mut t0 = server_key.create_trivial_radix(0, NB);
-    let mut t1 = server_key.create_trivial_radix(1, NB);
-    let mut inv = server_key.create_trivial_radix(0, NB);
+    let mut t0 = server_key.create_trivial_radix(0, padded_nb);
+    let mut t1 = server_key.create_trivial_radix(1, padded_nb);
+    let mut inv = server_key.create_trivial_radix(0, padded_nb);
     let mut trim = 0;
     // euclidean algorithm
     // NB/2 best case and NB worst case
@@ -159,7 +160,6 @@ pub fn inverse_mod_trim<
 
     // final result mod p
     // inverse can be **negative**. so we need to add p to make it positive
-    server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut inv, 1);
     server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
@@ -167,7 +167,6 @@ pub fn inverse_mod_trim<
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
-    server_key.trim_radix_blocks_msb_assign(&mut inv, 1);
     inv
 }
 
@@ -180,15 +179,16 @@ pub fn inverse_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    let padded_nb = NB + 1;
     // implement extended euclidean algorithm
     // assume a < p. (no check)
-    let a = a.clone();
-    let mut r0 = server_key.create_trivial_radix(p, NB);
+    let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
+    let mut r0 = server_key.create_trivial_radix(p, padded_nb);
     let mut r1 = a.clone();
     let mut was_done = server_key.create_trivial_radix(0, 1);
-    let mut t0 = server_key.create_trivial_radix(0, NB);
-    let mut t1 = server_key.create_trivial_radix(1, NB);
-    let mut inv = server_key.create_trivial_radix(0, NB);
+    let mut t0 = server_key.create_trivial_radix(0, padded_nb);
+    let mut t1 = server_key.create_trivial_radix(1, padded_nb);
+    let mut inv = server_key.create_trivial_radix(0, padded_nb);
 
     // euclidean algorithm
     // NB/2 best case and NB worst case
@@ -232,7 +232,6 @@ pub fn inverse_mod<
 
     // final result mod p
     // inverse can be **negative**. so we need to add p to make it positive
-    server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut inv, 1);
     server_key.smart_scalar_add_assign_parallelized(&mut inv, p);
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
@@ -240,7 +239,6 @@ pub fn inverse_mod<
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
-    server_key.trim_radix_blocks_msb_assign(&mut inv, 1);
     inv
 }
 
