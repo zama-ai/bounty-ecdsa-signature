@@ -200,28 +200,28 @@ fn main() {
     //);
     //println!("pow mod in {:.2} s\n", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let (x_new, y_new, z_new) = group_projective_double::<NUM_BLOCK, _>(
-        &ct_x1,
-        &ct_y1,
-        &server_key.create_trivial_radix(1, NUM_BLOCK),
-        p,
-        &server_key,
-    );
-    let elasped = now.elapsed();
-    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    println!(
-        "{},{},{} * 2 -> {},{},{}",
-        format(x1),
-        format(y1),
-        format(1),
-        format(x_dec),
-        format(y_dec),
-        format(z_dec)
-    );
-    println!("group double in {:.2} s", elasped.as_secs_f32());
+    //let now = Instant::now();
+    //let (x_new, y_new, z_new) = group_projective_double::<NUM_BLOCK, _>(
+    //&ct_x1,
+    //&ct_y1,
+    //&server_key.create_trivial_radix(1, NUM_BLOCK),
+    //p,
+    //&server_key,
+    //);
+    //let elasped = now.elapsed();
+    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    //println!(
+    //"{},{},{} * 2 -> {},{},{}",
+    //format(x1),
+    //format(y1),
+    //format(1),
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec)
+    //);
+    //println!("group double in {:.2} s", elasped.as_secs_f32());
 
     //let now = Instant::now();
     //let (x_new, y_new, z_new) = group_projective_add_projective::<NUM_BLOCK, _>(
@@ -278,20 +278,20 @@ fn main() {
     //);
     //println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let (x_aff, y_aff) =
-        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-    let elasped = now.elapsed();
-    println!(
-        "{},{},{} -> {},{}",
-        format(x_dec),
-        format(y_dec),
-        format(z_dec),
-        format(client_key.decrypt_radix::<Integer>(&x_aff)),
-        format(client_key.decrypt_radix::<Integer>(&y_aff))
-    );
-    println!(
-        "group projective into affine in {:.2}s",
-        elasped.as_secs_f32()
-    );
+    //let now = Instant::now();
+    //let (x_aff, y_aff) =
+    //group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+    //let elasped = now.elapsed();
+    //println!(
+    //"{},{},{} -> {},{}",
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec),
+    //format(client_key.decrypt_radix::<Integer>(&x_aff)),
+    //format(client_key.decrypt_radix::<Integer>(&y_aff))
+    //);
+    //println!(
+    //"group projective into affine in {:.2}s",
+    //elasped.as_secs_f32()
+    //);
 }

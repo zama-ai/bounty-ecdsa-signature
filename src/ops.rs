@@ -88,6 +88,17 @@ pub fn modulo<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> +
     r
 }
 
+pub fn inverse_mod<
+    const NB: usize,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    a: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    inverse_mod_trim::<NB, _>(a, p, server_key)
+}
+
 /// a^-1 mod p where a*a^-1 = 1 mod p
 pub fn inverse_mod_trim<
     const NB: usize,
@@ -152,10 +163,12 @@ pub fn inverse_mod_trim<
             r1 = r.clone();
         }
 
-        println!(
-            "Inverse mod bit {i} took {:.2}s",
-            now.elapsed().as_secs_f64()
-        );
+        read_client_key(|_| {
+            println!(
+                "Inverse mod bit {i} took {:.2}s",
+                now.elapsed().as_secs_f64()
+            );
+        });
     }
 
     // final result mod p
@@ -171,7 +184,7 @@ pub fn inverse_mod_trim<
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
-pub fn inverse_mod<
+pub fn inverse_mod_without_trim<
     const NB: usize,
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
@@ -463,6 +476,7 @@ pub fn pow_mod<
 mod tests {
     use std::time::Instant;
 
+    use num_bigint::BigInt;
     use tfhe::{
         core_crypto::prelude::Numeric,
         integer::{keycache::IntegerKeyCache, IntegerCiphertext, RadixCiphertext},
@@ -471,7 +485,9 @@ mod tests {
 
     use crate::{
         helper::format,
-        ops::{add_mod, double_mod, mul_mod, mul_mod_constant, multi_add_mod, sub_mod},
+        ops::{
+            add_mod, double_mod, inverse_mod, mul_mod, mul_mod_constant, multi_add_mod, sub_mod,
+        },
     };
 
     #[test]
@@ -640,5 +656,62 @@ mod tests {
             &server_key,
         );
         assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+    }
+
+    #[test]
+    fn correct_inverse_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 157;
+
+        let inverse_mod_naive = |a: u128| -> u128 {
+            let p = BigInt::from(p);
+            BigInt::from(a)
+                .modpow(&(&p - BigInt::from(2)), &p)
+                .try_into()
+                .unwrap()
+        };
+
+        let a: u128 = 8;
+        let b: u128 = 6;
+        let e: u128 = 45;
+        let f: u128 = 123;
+        let h: u128 = 127;
+        let i: u128 = 156;
+
+        let c = inverse_mod_naive(a);
+        let enc_c =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = inverse_mod_naive(b);
+        let enc_d =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+
+        let m = inverse_mod_naive(e);
+        let enc_m =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(e, NUM_BLOCK), p, &server_key);
+        assert_eq!(m as u8, client_key.decrypt_radix::<u8>(&enc_m));
+
+        let g = inverse_mod_naive(f);
+        let enc_g =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
+        assert_eq!(g as u8, client_key.decrypt_radix::<u8>(&enc_g));
+
+        let j = inverse_mod_naive(h);
+        let enc_j =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(h, NUM_BLOCK), p, &server_key);
+        assert_eq!(j as u8, client_key.decrypt_radix::<u8>(&enc_j));
+
+        let k = inverse_mod_naive(i);
+        let enc_k =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(i, NUM_BLOCK), p, &server_key);
+        assert_eq!(k as u8, client_key.decrypt_radix::<u8>(&enc_k));
+
+        let l = inverse_mod_naive(f);
+        let enc_l =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
+        assert_eq!(l as u8, client_key.decrypt_radix::<u8>(&enc_l));
     }
 }
