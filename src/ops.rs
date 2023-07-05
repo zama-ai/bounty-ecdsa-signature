@@ -169,8 +169,6 @@ pub fn mul_mod_bitwise<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let now = Instant::now();
-
     let mut res = server_key.create_trivial_radix(0u64, NB);
     let mut a_tmp = a.clone();
     let b_tmp = b.clone();
@@ -182,8 +180,6 @@ pub fn mul_mod_bitwise<
     #[allow(clippy::redundant_clone)]
     let mut to_add_later = res.clone();
 
-    println!("initial cost - {}ms", now.elapsed().as_millis());
-
     for i in 0..<P as Numeric>::BITS {
         let now = Instant::now();
 
@@ -191,7 +187,7 @@ pub fn mul_mod_bitwise<
             || {
                 rayon::join(
                     || server_key.scalar_right_shift_parallelized(&b_next_tmp, 1),
-                    || add_mod::<NB, _>(&a_tmp, &a_tmp, p, server_key),
+                    || double_mod::<NB, _>(&a_tmp, p, server_key),
                 )
             },
             || {
@@ -212,7 +208,7 @@ pub fn mul_mod_bitwise<
             },
         );
 
-        println!("inverse bit {i} took {:.2}s", now.elapsed().as_secs_f32());
+        println!("mul mod bit {i} took {:.2}s", now.elapsed().as_secs_f32());
     }
 
     add_mod::<NB, _>(&res, &to_add_later, p, server_key)
@@ -262,6 +258,7 @@ pub fn mul_mod_constant<
 }
 
 /// a^2 mod p
+#[inline(always)]
 pub fn square_mod<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -274,6 +271,7 @@ pub fn square_mod<
 }
 
 /// a*2 mod p
+#[inline(always)]
 pub fn double_mod<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -282,7 +280,16 @@ pub fn double_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    add_mod::<NB, _>(a, a, p, server_key)
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
+    server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
+    let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    let mut to_sub =
+        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+    server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
+    server_key.full_propagate_parallelized(&mut a_expanded);
+    server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    a_expanded
 }
 
 /// a^b mod p
