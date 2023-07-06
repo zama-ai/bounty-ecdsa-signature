@@ -16,6 +16,23 @@ pub fn format<T: DecomposableInto<u8> + Copy>(a: T) -> String {
     .to_string()
 }
 
+pub fn u256_to_bigint(a: U256) -> BigInt {
+    BigInt::from_bytes_le(
+        num_bigint::Sign::Plus,
+        &BlockDecomposer::new(a, 8)
+            .iter_as::<u8>()
+            .collect::<Vec<_>>(),
+    )
+}
+
+pub fn bigint_to_u256(a: &BigInt) -> U256 {
+    let mut res = U256::ZERO;
+    for (i, b) in a.to_bytes_le().1.iter().enumerate() {
+        res += U256::from(*b as u8) << (i * 8) as u32;
+    }
+    res
+}
+
 pub fn u256_from_decimal_string(s: &str) -> U256 {
     let mut res = U256::ZERO;
     for c in s.chars() {

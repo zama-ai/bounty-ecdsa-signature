@@ -12,6 +12,7 @@ use tfhe::{
 use crate::helper::{format, read_client_key};
 
 pub mod group;
+pub mod mersenne;
 
 /// a_0 + a_1 + ... + a_n mod p
 pub fn multi_add_mod<
@@ -483,6 +484,7 @@ mod tests {
     use std::time::Instant;
 
     use num_bigint::BigInt;
+    use rand::{thread_rng, Rng};
     use tfhe::{
         core_crypto::prelude::Numeric,
         integer::{keycache::IntegerKeyCache, IntegerCiphertext, RadixCiphertext},
