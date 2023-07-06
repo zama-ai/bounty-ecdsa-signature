@@ -1,7 +1,7 @@
 use num_bigint::BigInt;
 use tfhe::integer::{
     block_decomposition::{BlockDecomposer, DecomposableInto},
-    ClientKey, U256,
+    client_key, ClientKey, U256,
 };
 
 use crate::CLIENT_KEY;
@@ -48,6 +48,10 @@ pub fn read_client_key<F: FnOnce(&ClientKey)>(f: F) {
         .unwrap()
         .as_ref()
         .inspect(|client_key| f(client_key));
+}
+
+pub fn set_client_key(client_key: &ClientKey) {
+    *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
 }
 
 #[cfg(test)]
