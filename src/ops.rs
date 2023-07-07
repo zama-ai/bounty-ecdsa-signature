@@ -11,6 +11,8 @@ use tfhe::{
 
 use crate::helper::{format, read_client_key};
 
+use self::mersenne::mod_mersenne;
+
 pub mod group;
 pub mod mersenne;
 pub mod primitive;
@@ -79,7 +81,10 @@ pub fn modulo_fast<
 
 /// turn x mod a to x mod b
 /// for all cases, require 1 division
-pub fn modulo<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+pub fn modulo_div_rem<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
     x: &RadixCiphertext,
     b: P,
     server_key: &ServerKey,
@@ -88,43 +93,6 @@ pub fn modulo<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> +
         .smart_div_rem_parallelized(&mut x.clone(), &mut server_key.create_trivial_radix(b, NB));
     server_key.full_propagate_parallelized(&mut r);
     r
-}
-
-/// turn x mod p^2 to x mod p
-pub fn modulo_p2<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
-    x: &RadixCiphertext,
-    p: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    let current_nb = x.blocks().len();
-    let c0 = server_key.trim_radix_blocks_msb(&x, current_nb / 2);
-    let c1 = server_key.trim_radix_blocks_lsb(&x, current_nb / 2);
-    let c1_size = c1.blocks().len();
-    let ((w1, w2, w3), (w4, w5, w6)) = rayon::join(
-        || {
-            (
-                server_key.scalar_right_shift_parallelized(&c1, 32),
-                server_key.scalar_right_shift_parallelized(&c1, 9),
-                server_key.scalar_right_shift_parallelized(&c1, 8),
-            )
-        },
-        || {
-            (
-                server_key.scalar_right_shift_parallelized(&c1, 7),
-                server_key.scalar_right_shift_parallelized(&c1, 6),
-                server_key.scalar_right_shift_parallelized(&c1, 4),
-            )
-        },
-    );
-    let k1 = {
-        let (rhs, lhs) = rayon::join(
-            || server_key.scalar_right_shift_parallelized(&c1, (c1_size * 2 - 4) as u64),
-            || server_key.scalar_right_shift_parallelized(&c1, (c1_size * 2 - 6) as u64),
-        );
-        server_key.add_parallelized(&rhs, &lhs)
-    };
-
-    todo!()
 }
 
 pub fn inverse_mod<

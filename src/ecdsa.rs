@@ -16,7 +16,7 @@ use crate::{
             group_projective_add_projective, group_projective_into_affine,
             group_projective_scalar_mul,
         },
-        inverse_mod, modulo, mul_mod,
+        inverse_mod, modulo_fast, mul_mod,
     },
 };
 
@@ -52,7 +52,7 @@ pub fn ecdsa_sign<
     });
     // r = x
     // s = k^-1 * (m + r * sk)
-    let r = modulo::<NB, _>(&x, r_modulo, server_key);
+    let r = modulo_fast::<NB, _>(&x, r_modulo, server_key);
     let k_inv = inverse_mod::<NB, _>(&k, r_modulo, server_key);
     read_client_key(|client_key| {
         println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
