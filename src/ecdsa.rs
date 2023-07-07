@@ -12,7 +12,7 @@ use crate::{
     helper::{format, read_client_key},
     ops::{
         add_mod,
-        group::{
+        group_homogenous::{
             group_projective_add_projective, group_projective_into_affine,
             group_projective_scalar_mul,
         },

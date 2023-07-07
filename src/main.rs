@@ -17,7 +17,7 @@ use crate::{
     helper::{format, from_bigint, to_bigint, u256_from_decimal_string},
     ops::{
         add_mod, double_mod,
-        group::{
+        group_homogenous::{
             group_projective_add_projective, group_projective_double, group_projective_into_affine,
             group_projective_scalar_mul,
         },

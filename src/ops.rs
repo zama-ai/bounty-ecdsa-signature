@@ -13,7 +13,7 @@ use crate::helper::{format, read_client_key};
 
 use self::mersenne::{mod_mersenne, mul_mod_mersenne};
 
-pub mod group;
+pub mod group_homogenous;
 pub mod mersenne;
 pub mod primitive;
 
