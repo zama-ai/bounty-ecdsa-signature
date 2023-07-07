@@ -15,4 +15,6 @@ lazy_static = "1.4.0"
 
 [features]
 default = []
-print-traces = []
+low_level_debug = ["high_level_debug"]
+high_level_debug = []
+go_big = []
