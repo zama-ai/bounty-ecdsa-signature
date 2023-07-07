@@ -16,7 +16,7 @@ use crate::{
 use super::inverse_mod;
 
 /// Projective point at infinity in homogeneous coordinates
-pub fn group_projective_zero_homogenous<const NB: usize>(
+pub fn group_projective_zero<const NB: usize>(
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
     (

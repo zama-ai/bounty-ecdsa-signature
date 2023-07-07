@@ -14,6 +14,7 @@ use crate::helper::{format, read_client_key};
 use self::mersenne::{mod_mersenne, mul_mod_mersenne};
 
 pub mod group_homogenous;
+pub mod group_jacobian;
 pub mod mersenne;
 pub mod primitive;
 
