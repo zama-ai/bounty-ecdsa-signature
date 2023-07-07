@@ -28,7 +28,7 @@ pub fn group_projective_zero_homogenous<const NB: usize>(
 
 pub fn group_projective_double<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -103,7 +103,7 @@ pub fn group_projective_add_affine<
 
 pub fn group_projective_add_projective<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     x0: &RadixCiphertext,
     y0: &RadixCiphertext,

@@ -1,6 +1,7 @@
 use num_bigint::BigInt;
 use tfhe::integer::{
-    block_decomposition::DecomposableInto, IntegerCiphertext, RadixCiphertext, ServerKey, U256,
+    block_decomposition::{DecomposableInto, RecomposableFrom},
+    IntegerCiphertext, RadixCiphertext, ServerKey, U256,
 };
 
 use crate::helper::{
@@ -10,6 +11,7 @@ use crate::helper::{
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
 /// `c` in the form of c = 2^n_0 - p
+/// `c` must be in range 0 <= c <= 2^floor(n/2)
 #[inline(always)]
 pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
     assert!(coeff.len() > 1);
@@ -28,6 +30,8 @@ pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
 }
 
 #[inline(always)]
+/// Calculate n, c from p
+/// `c` must be in range 0 <= c <= 2^floor(n/2)
 pub fn mersenne_coeff_p<P: DecomposableInto<u8> + Copy + Sync>(p: P) -> (u32, BigInt) {
     let pb = to_bigint(p);
     let n = bigint_ilog2_ceil(&pb);
@@ -101,32 +105,28 @@ pub fn mod_mersenne<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let (n, c) = mersenne_coeff_p(p);
-
-    let mut a = server_key.scalar_right_shift_parallelized(&x, n as u64);
-    let mut b =
-        server_key.sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
-    let len = a.blocks().len();
-    if len > NB {
+    let process = |x: &RadixCiphertext| {
+        let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
+        let len = x.blocks().len();
+        let mut b = server_key.smart_sub_parallelized(
+            &mut x.clone(),
+            &mut server_key.scalar_left_shift_parallelized(&a, n as u64),
+        );
         server_key.trim_radix_blocks_msb_assign(&mut a, len - NB);
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-    }
-    // c * a + b
-    let mut cab = server_key.add_parallelized(
-        &b,
-        &server_key.mul_parallelized(&a, &server_key.create_trivial_radix(bigint_to_u256(&c), NB)),
-    );
-    let len = cab.blocks().len();
-    server_key.trim_radix_blocks_msb_assign(&mut cab, len - NB);
-    // if cab >= p, cab -= p
-    let mut is_gt = server_key.scalar_gt_parallelized(&cab, p);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    server_key.smart_sub_assign_parallelized(
-        &mut cab,
-        &mut server_key
-            .smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt),
-    );
-    server_key.full_propagate_parallelized(&mut cab);
-    cab
+        let ca = server_key.mul_parallelized(
+            &server_key.create_trivial_radix(bigint_to_u256(&c), NB * 3 / 2),
+            &a,
+        );
+        let x_mod_p = server_key.add_parallelized(&ca, &b);
+        x_mod_p
+    };
+    let x_mod_p = process(x);
+    let x_mod_p2 = process(&x_mod_p);
+    let mut x_mod_p3 = process(&x_mod_p2);
+    let len = x_mod_p3.blocks().len();
+    server_key.trim_radix_blocks_msb_assign(&mut x_mod_p3, len - NB);
+    x_mod_p3
 }
 
 /// Calculate a * b mod p
@@ -146,7 +146,7 @@ pub fn mul_mod_mersenne_coeff<const NB: usize>(
 /// Calculate a * b mod p
 pub fn mul_mod_mersenne<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     a: &RadixCiphertext,
     b: &RadixCiphertext,

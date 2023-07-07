@@ -11,7 +11,7 @@ use tfhe::{
 
 use crate::helper::{format, read_client_key};
 
-use self::mersenne::mod_mersenne;
+use self::mersenne::{mod_mersenne, mul_mod_mersenne};
 
 pub mod group;
 pub mod mersenne;
@@ -364,7 +364,10 @@ pub fn mul_mod_bitwise<
 }
 
 /// a * b mod p
-pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+pub fn mul_mod_div_rem<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -381,6 +384,19 @@ pub fn mul_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.full_propagate_parallelized(&mut r);
     server_key.trim_radix_blocks_msb_assign(&mut r, NB);
     r
+}
+
+/// a * b mod p
+pub fn mul_mod<
+    const NB: usize,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    a: &RadixCiphertext,
+    b: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    mul_mod_mersenne::<NB, _>(a, b, p, server_key)
 }
 
 /// a * b mod p where b is a constant
@@ -410,7 +426,7 @@ pub fn mul_mod_constant<
 #[inline(always)]
 pub fn square_mod<
     const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     a: &RadixCiphertext,
     p: P,
@@ -502,6 +518,7 @@ mod tests {
         ops::{
             add_mod, double_mod, inverse_mod, mul_mod, mul_mod_constant, multi_add_mod, sub_mod,
         },
+        CLIENT_KEY,
     };
 
     #[test]
@@ -602,13 +619,15 @@ mod tests {
     #[test]
     fn correct_mul_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
         const NUM_BLOCK: usize = 4;
-        let p: u8 = 251;
+        // 2^7 = 128 -> prime = 127
+        let p: u16 = 251;
 
         let mul_mod_naive = |a: u128, b: u128| (a * b) % p as u128;
 
-        let a: u128 = 248;
-        let b: u128 = 249;
+        let a: u128 = 249;
+        let b: u128 = 248;
         let c: u128 = mul_mod_naive(a, b);
         let enc_c = mul_mod::<NUM_BLOCK, _>(
             &client_key.encrypt_radix(a, NUM_BLOCK),
