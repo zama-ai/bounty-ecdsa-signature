@@ -3,10 +3,13 @@ use tfhe::integer::{
     block_decomposition::DecomposableInto, IntegerCiphertext, RadixCiphertext, ServerKey, U256,
 };
 
-use crate::helper::{bigint_to_u256, format, read_client_key};
+use crate::helper::{
+    bigint_ilog2_ceil, bigint_to_u256, format, read_client_key, to_bigint, u256_to_bigint,
+};
 
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
+/// `c` in the form of c = 2^n_0 - p
 #[inline(always)]
 pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
     assert!(coeff.len() > 1);
@@ -22,6 +25,15 @@ pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
     let c = &q - &p;
 
     (n, p, q, c)
+}
+
+#[inline(always)]
+pub fn mersenne_coeff_p<P: DecomposableInto<u8> + Copy + Sync>(p: P) -> (u32, BigInt) {
+    let pb = to_bigint(p);
+    let n = bigint_ilog2_ceil(&pb);
+    let c = (BigInt::from(1) << n) - &pb;
+
+    (n, c)
 }
 
 /// Calculate x mod p^2 mod p
@@ -43,16 +55,21 @@ pub fn mersenne_mod_native(coeff: &[u32], x: &BigInt) -> BigInt {
 
 /// Calculate x mod p^2 mod p
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
-pub fn mersenne_mod<const NB: usize>(
+pub fn mod_mersenne_coeff<const NB: usize>(
     x: &RadixCiphertext,
     p_coeff: &[u32],
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let (n, p, _, c) = mersenne_coeff(p_coeff);
 
-    let a = server_key.scalar_right_shift_parallelized(&x, n as u64);
-    let b =
+    let mut a = server_key.scalar_right_shift_parallelized(&x, n as u64);
+    let mut b =
         server_key.sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
+    let len = a.blocks().len();
+    if len > NB {
+        server_key.trim_radix_blocks_msb_assign(&mut a, len - NB);
+        server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
+    }
     // c * a + b
     let mut cab = server_key.add_parallelized(
         &b,
@@ -74,9 +91,47 @@ pub fn mersenne_mod<const NB: usize>(
     cab
 }
 
+/// Calculate x mod p^2 mod p
+pub fn mod_mersenne<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let (n, c) = mersenne_coeff_p(p);
+
+    let mut a = server_key.scalar_right_shift_parallelized(&x, n as u64);
+    let mut b =
+        server_key.sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
+    let len = a.blocks().len();
+    if len > NB {
+        server_key.trim_radix_blocks_msb_assign(&mut a, len - NB);
+        server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
+    }
+    // c * a + b
+    let mut cab = server_key.add_parallelized(
+        &b,
+        &server_key.mul_parallelized(&a, &server_key.create_trivial_radix(bigint_to_u256(&c), NB)),
+    );
+    let len = cab.blocks().len();
+    server_key.trim_radix_blocks_msb_assign(&mut cab, len - NB);
+    // if cab >= p, cab -= p
+    let mut is_gt = server_key.scalar_gt_parallelized(&cab, p);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    server_key.smart_sub_assign_parallelized(
+        &mut cab,
+        &mut server_key
+            .smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt),
+    );
+    server_key.full_propagate_parallelized(&mut cab);
+    cab
+}
+
 /// Calculate a * b mod p
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
-pub fn mul_mod_mersenne<const NB: usize>(
+pub fn mul_mod_mersenne_coeff<const NB: usize>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p_coeff: &[u32],
@@ -85,9 +140,23 @@ pub fn mul_mod_mersenne<const NB: usize>(
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
     server_key.full_propagate_parallelized(&mut a_expanded);
-    let multiplied = mersenne_mod::<NB>(&a_expanded, p_coeff, server_key);
-    //server_key.trim_radix_blocks_msb(&multiplied, NB)
-    multiplied
+    mod_mersenne_coeff::<NB>(&a_expanded, p_coeff, server_key)
+}
+
+/// Calculate a * b mod p
+pub fn mul_mod_mersenne<
+    const NB: usize,
+    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    a: &RadixCiphertext,
+    b: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
+    server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
+    server_key.full_propagate_parallelized(&mut a_expanded);
+    mod_mersenne::<NB, _>(&a_expanded, p, server_key)
 }
 
 #[cfg(test)]
@@ -100,10 +169,10 @@ mod tests {
 
     use crate::{
         helper::{bigint_to_u256, set_client_key, u256_to_bigint},
-        ops::mersenne::{mersenne_mod, mersenne_mod_native, mul_mod_mersenne},
+        ops::mersenne::{mersenne_mod_native, mod_mersenne_coeff, mul_mod_mersenne_coeff},
     };
 
-    use super::mersenne_coeff;
+    use super::{mersenne_coeff, mersenne_coeff_p};
 
     #[test]
     fn correct_mersenne_native_mod() {
@@ -125,19 +194,19 @@ mod tests {
 
         let x = BigInt::from(16000) % &p2;
         let enc_x = client_key.encrypt_radix(bigint_to_u256(&x), NUM_BLOCK);
-        let enc_x_mod_p = mersenne_mod::<NUM_BLOCK>(&enc_x, coeff, &server_key);
+        let enc_x_mod_p = mod_mersenne_coeff::<NUM_BLOCK>(&enc_x, coeff, &server_key);
         let dec_x_mod_p = u256_to_bigint(client_key.decrypt_radix::<U256>(&enc_x_mod_p));
         assert_eq!(dec_x_mod_p, &x % &p);
 
         let y = BigInt::from(1500) % &p2;
         let enc_y = client_key.encrypt_radix(bigint_to_u256(&y), NUM_BLOCK);
-        let enc_y_mod_p = mersenne_mod::<NUM_BLOCK>(&enc_y, coeff, &server_key);
+        let enc_y_mod_p = mod_mersenne_coeff::<NUM_BLOCK>(&enc_y, coeff, &server_key);
         let dec_y_mod_p = u256_to_bigint(client_key.decrypt_radix::<U256>(&enc_y_mod_p));
         assert_eq!(dec_y_mod_p, &y % &p);
 
         let z = BigInt::from(0) % &p2;
         let enc_z = client_key.encrypt_radix(bigint_to_u256(&z), NUM_BLOCK);
-        let enc_z_mod_p = mersenne_mod::<NUM_BLOCK>(&enc_z, coeff, &server_key);
+        let enc_z_mod_p = mod_mersenne_coeff::<NUM_BLOCK>(&enc_z, coeff, &server_key);
         let dec_z_mod_p = u256_to_bigint(client_key.decrypt_radix::<U256>(&enc_z_mod_p));
         assert_eq!(dec_z_mod_p, &z % &p);
     }
@@ -156,10 +225,17 @@ mod tests {
         let y = 126;
         let enc_x = client_key.encrypt_radix(x, NUM_BLOCK);
         let enc_y = client_key.encrypt_radix(y, NUM_BLOCK);
-        let xy_mod_p = mul_mod_mersenne::<NUM_BLOCK>(&enc_x, &enc_y, coeff, &server_key);
+        let xy_mod_p = mul_mod_mersenne_coeff::<NUM_BLOCK>(&enc_x, &enc_y, coeff, &server_key);
         assert_eq!(
             client_key.decrypt_radix::<u128>(&xy_mod_p),
             mul_mod_naive(x, y)
         );
+    }
+
+    #[test]
+    fn correct_mersenne_transfrom() {
+        let p = 127;
+        let coeff = mersenne_coeff_p(p);
+        assert_eq!(coeff, (7, BigInt::from(1)));
     }
 }
