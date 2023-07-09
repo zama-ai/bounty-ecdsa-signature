@@ -1,5 +1,7 @@
-use std::time::Instant;
-
+use rand::thread_rng;
+use rand::Rng;
+use std::process;
+use std::{task, time::Instant};
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
@@ -36,6 +38,15 @@ pub fn group_projective_double<
     // case curve a = 0
     // a = x^2
     // b = y^2
+
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+
+    #[cfg(feature = "high_level_timing")]
+    println!("group projective double start -- ref {}", task_ref);
+
     let (a, b) = rayon::join(
         || square_mod::<NB, _>(x, p, server_key),
         || square_mod::<NB, _>(y, p, server_key),
@@ -79,7 +90,12 @@ pub fn group_projective_double<
         },
     );
     let y_prime = sub_mod::<NB, _>(&edx, &c8, p, server_key);
-
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective double done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
     (x_prime, y_prime, z_prime)
 }
 
@@ -96,6 +112,13 @@ pub fn group_projective_add_projective<
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!("group projective add start -- ref {}", task_ref);
+
     // z0z0 = z0^2
     // z1z1 = z1^2
     let (z0z0, z1z1) = rayon::join(
@@ -188,6 +211,12 @@ pub fn group_projective_add_projective<
             )
         },
     );
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective add done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
 
     (x_prime, y_prime, z_prime)
 }
@@ -203,6 +232,13 @@ pub fn group_projective_scalar_mul<
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!("group projective scalar mul start -- ref {}", task_ref);
+
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();
     let mut tmp_z = z.clone();
@@ -212,7 +248,9 @@ pub fn group_projective_scalar_mul<
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
     for i in 0..<P as Numeric>::BITS {
-        let now = Instant::now();
+        #[cfg(feature = "high_level_timing")]
+        let bit_start = Instant::now();
+
         let (mut bit, new_scalar) = rayon::join(
             || server_key.scalar_bitand_parallelized(&mut scalar.clone(), 1),
             || server_key.scalar_right_shift_parallelized(&mut scalar.clone(), 1),
@@ -248,7 +286,7 @@ pub fn group_projective_scalar_mul<
             },
             || group_projective_double::<NB, _>(&tmp_x, &tmp_y, &tmp_z, p, server_key),
         );
-
+        #[cfg(feature = "high_level_timing")]
         read_client_key(|client_key| {
             println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
             println!(
@@ -264,13 +302,20 @@ pub fn group_projective_scalar_mul<
                 format(client_key.decrypt_radix::<P>(&tmp_z)),
             );
             println!(
-                "Scalar mul bit {} took {:.2}s",
+                "----Scalar mul bit {} done in {:.2}s -- ref {}",
                 i,
-                now.elapsed().as_secs_f32()
+                bit_start.elapsed().as_secs_f32(),
+                task_ref
             );
         });
     }
 
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective scalar mul done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
     (res_x, res_y, res_z)
 }
 
@@ -284,14 +329,28 @@ pub fn group_projective_into_affine<
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!("group projective into affine start -- ref {}", task_ref);
+
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
     let z_inv2 = square_mod::<NB, _>(&z_inv, p, server_key);
     let z_inv3 = mul_mod::<NB, _>(&z_inv2, &z_inv, p, server_key);
 
-    rayon::join(
+    let res = rayon::join(
         || mul_mod::<NB, _>(&x, &z_inv2, p, server_key),
         || mul_mod::<NB, _>(&y, &z_inv3, p, server_key),
-    )
+    );
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective into affine done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+    res
 }
 
 #[cfg(test)]

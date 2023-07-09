@@ -1,5 +1,8 @@
 use std::time::Instant;
 
+use rand::thread_rng;
+use rand::Rng;
+use std::process;
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
@@ -35,6 +38,13 @@ pub fn ecdsa_sign<
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     // (x, y) = k * G
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!("ecdsa sign start -- ref {}", task_ref);
+
     println!("Calculating (x, y) = k * G");
     let (x_proj, y_proj, z_proj) = group_projective_scalar_mul::<NB, _>(
         &server_key.create_trivial_radix(generator.0, NB),
@@ -69,6 +79,13 @@ pub fn ecdsa_sign<
         println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
     });
 
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "ecdsa sign end, done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+
     (r, s)
 }
 
@@ -83,6 +100,12 @@ pub fn ecdsa_verify<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!("ecdsa verify start -- ref {}", task_ref);
     // s^-1
     let s_inv = inverse_mod::<NB, _>(&signature.1, p, server_key);
     // u1 = m * s^-1
@@ -119,6 +142,12 @@ pub fn ecdsa_verify<
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
     let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x, &mut signature.0.clone());
 
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "ecdsa verify done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
     // valid if z != 0 && x == r
     server_key.smart_bitand_parallelized(&mut is_z_zero, &mut is_x_eq_r)
 }

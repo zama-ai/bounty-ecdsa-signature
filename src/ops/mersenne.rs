@@ -1,4 +1,8 @@
 use num_bigint::BigInt;
+use rand::thread_rng;
+use rand::Rng;
+use std::process;
+use std::time::Instant;
 use tfhe::integer::{
     block_decomposition::{DecomposableInto, RecomposableFrom},
     IntegerCiphertext, RadixCiphertext, ServerKey, U256,
@@ -153,10 +157,24 @@ pub fn mul_mod_mersenne<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("mul mod mersenne start -- ref {}", task_ref);
+
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
     server_key.full_propagate_parallelized(&mut a_expanded);
-    mod_mersenne::<NB, _>(&a_expanded, p, server_key)
+    let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "mul mod mersenne done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+    res
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
+use rand::thread_rng;
+use rand::Rng;
+use std::process;
 use std::time::Instant;
-
 use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
     integer::ClientKey,
@@ -29,6 +31,11 @@ pub fn multi_add_mod<
 ) -> RadixCiphertext {
     // assume large p and a,b < p
 
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+
     // add all elements in a together
     let le = a.len();
     // find bit length of le
@@ -56,6 +63,12 @@ pub fn multi_add_mod<
     }
 
     server_key.full_propagate_parallelized(&mut sum);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "multi add mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
 
     sum
 }
@@ -116,6 +129,13 @@ pub fn inverse_mod_trim<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("inverse_mod: start -- ref {}", task_ref);
+
     let padded_nb = NB + 1;
     // implement extended euclidean algorithm with trim bit
     // assume a < p. (no check)
@@ -129,8 +149,11 @@ pub fn inverse_mod_trim<
     let mut trim = 0;
     // euclidean algorithm
     // NB/2 best case and NB worst case
-    for i in 0..(<P as Numeric>::BITS + 1) {
-        let now = Instant::now();
+    let loop_end = <P as Numeric>::BITS + 1;
+    for i in 0..loop_end {
+        #[cfg(feature = "low_level_timing")]
+        let bit_start = Instant::now();
+
         // q, r = r0 / r1
         let (mut q, mut r) =
             server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
@@ -172,12 +195,16 @@ pub fn inverse_mod_trim<
             r1 = r.clone();
         }
 
-        read_client_key(|_| {
-            println!(
-                "Inverse mod bit {i} took {:.2}s",
-                now.elapsed().as_secs_f64()
-            );
-        });
+        #[cfg(feature = "low_level_timing")]
+        {
+            if (i == 0) | (i == loop_end - 1) {
+                println!(
+                    "----Inverse mod bit {i} done in {:.2}s -- ref {}",
+                    bit_start.elapsed().as_secs_f64(),
+                    task_ref
+                );
+            }
+        }
     }
 
     // final result mod p
@@ -194,6 +221,14 @@ pub fn inverse_mod_trim<
     );
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
+
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Inverse mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
+
     inv
 }
 
@@ -250,11 +285,6 @@ pub fn inverse_mod_without_trim<
         // update values
         r0 = r1;
         r1 = r;
-
-        println!(
-            "Inverse mod bit {i} took {:.2}s",
-            now.elapsed().as_secs_f64()
-        );
     }
 
     // final result mod p
@@ -277,6 +307,14 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+
+    #[cfg(feature = "low_level_timing")]
+    println!("Add mod start -- ref {}", task_ref);
+
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
     let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
@@ -286,6 +324,12 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
     server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Add mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     a_expanded
 }
 
@@ -296,6 +340,13 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Sub mod start -- ref {}", task_ref);
+
     let mut is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
     let mut to_add =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
@@ -305,6 +356,12 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
     server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Sub mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     a_expanded
 }
 
@@ -319,6 +376,14 @@ pub fn mul_mod_bitwise<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+
+    #[cfg(feature = "low_level_timing")]
+    println!("Mul mod bitwise start -- ref {}", task_ref);
+
     let mut res = server_key.create_trivial_radix(0u64, NB);
     let mut a_tmp = a.clone();
     let b_tmp = b.clone();
@@ -330,8 +395,10 @@ pub fn mul_mod_bitwise<
     #[allow(clippy::redundant_clone)]
     let mut to_add_later = res.clone();
 
-    for i in 0..<P as Numeric>::BITS {
-        let now = Instant::now();
+    let loop_end = <P as Numeric>::BITS;
+    for i in 0..loop_end {
+        #[cfg(feature = "low_level_timing")]
+        let bit_start = Instant::now();
 
         ((b_next_tmp, a_tmp), (bit, (res, to_add_later))) = rayon::join(
             || {
@@ -357,11 +424,28 @@ pub fn mul_mod_bitwise<
                 )
             },
         );
-
-        println!("mul mod bit {i} took {:.2}s", now.elapsed().as_secs_f32());
+        #[cfg(feature = "low_level_timing")]
+        {
+            if (i == 0) | (i == loop_end - 1) {
+                println!(
+                    "----Mul mod bitwise {i} done in {:.2}s -- ref {}",
+                    bit_start.elapsed().as_secs_f64(),
+                    task_ref
+                );
+            }
+        }
     }
 
-    add_mod::<NB, _>(&res, &to_add_later, p, server_key)
+    let result = add_mod::<NB, _>(&res, &to_add_later, p, server_key);
+
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Mul mod bitwise done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
+
+    result
 }
 
 /// a * b mod p
@@ -375,6 +459,13 @@ pub fn mul_mod_div_rem<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Mul mod div rem start -- ref {}", task_ref);
+
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
     server_key.full_propagate_parallelized(&mut a_expanded);
@@ -384,6 +475,12 @@ pub fn mul_mod_div_rem<
     );
     server_key.full_propagate_parallelized(&mut r);
     server_key.trim_radix_blocks_msb_assign(&mut r, NB);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Mul mod div rem done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     r
 }
 
@@ -413,6 +510,13 @@ pub fn mul_mod_constant<
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Mul mod constant start -- ref {}", task_ref);
+
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_scalar_mul_assign_parallelized(&mut a_expanded, b);
     let (_q, mut r) = server_key.smart_div_rem_parallelized(
@@ -420,6 +524,12 @@ pub fn mul_mod_constant<
         &mut server_key.create_trivial_radix(p, NB * 2),
     );
     server_key.trim_radix_blocks_msb_assign(&mut r, NB);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Mul mod constant done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     r
 }
 
@@ -446,6 +556,13 @@ pub fn double_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Double mod start -- ref {}", task_ref);
+
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
     let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
@@ -455,6 +572,12 @@ pub fn double_mod<
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
     server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Double mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     a_expanded
 }
 
@@ -468,12 +591,21 @@ pub fn pow_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Pow mod start -- ref {}", task_ref);
+
     let mut res = server_key.create_trivial_radix(1, NB);
     let mut base = a.clone();
     let mut exponent = b.clone();
+    let loop_end = <P as Numeric>::BITS;
+    for i in 0..loop_end {
+        #[cfg(feature = "low_level_timing")]
+        let bit_start = Instant::now();
 
-    for i in 0..<P as Numeric>::BITS {
-        let timer = Instant::now();
         (res, (exponent, base)) = rayon::join(
             || {
                 let mut bit = server_key.scalar_bitand_parallelized(&exponent, 1);
@@ -496,9 +628,23 @@ pub fn pow_mod<
                 )
             },
         );
-        println!("pow mod bit {i} took {:.2}s", timer.elapsed().as_secs_f32());
+        #[cfg(feature = "low_level_timing")]
+        {
+            if (i == 0) | (i == loop_end - 1) {
+                println!(
+                    "----pow mod bit {i} done in {:.2}s -- ref {}",
+                    bit_start.elapsed().as_secs_f32(),
+                    task_ref,
+                );
+            }
+        }
     }
-
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Pow mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
     res
 }
 
@@ -537,11 +683,14 @@ mod tests {
         let enc_2a = double_mod::<NUM_BLOCK, _>(&enc_a, p, &server_key);
         let enc_4a = double_mod::<NUM_BLOCK, _>(&enc_2a, p, &server_key);
         let _enc_8a = double_mod::<NUM_BLOCK, _>(&enc_4a, p, &server_key);
-        println!("8a using addition - {}s", timer.elapsed().as_secs());
+        println!("8a using addition - {:.2}s", timer.elapsed().as_secs());
 
         let timer = Instant::now();
         let _enc_8a_mul = mul_mod_constant::<NUM_BLOCK, _, _>(&enc_a, 8u8, p, &server_key);
-        println!("8a using multiplication - {}s", timer.elapsed().as_secs());
+        println!(
+            "8a using multiplication - {:.2}s",
+            timer.elapsed().as_secs()
+        );
     }
 
     #[test]
