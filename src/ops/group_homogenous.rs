@@ -44,7 +44,10 @@ pub fn group_projective_double<
     let task_ref = rand::thread_rng().gen_range(0..1000);
 
     #[cfg(feature = "high_level_timing")]
-    println!("group projective double start -- ref {}", task_ref);
+    println!(
+        "group projective double homogenous start -- ref {}",
+        task_ref
+    );
 
     // u = 2yz
     // t = 3x^2 + a * z^2 -> a = 0 so t = 3x^2
@@ -120,7 +123,10 @@ pub fn group_projective_add_affine<
     let task_ref = rand::thread_rng().gen_range(0..1000);
 
     #[cfg(feature = "high_level_timing")]
-    println!("group projective add affine start -- ref {}", task_ref);
+    println!(
+        "group projective add affine homogenous start -- ref {}",
+        task_ref
+    );
 
     // code here
 
@@ -153,7 +159,10 @@ pub fn group_projective_add_projective<
     let task_ref = rand::thread_rng().gen_range(0..1000);
 
     #[cfg(feature = "high_level_timing")]
-    println!("group projective add projective start -- ref {}", task_ref);
+    println!(
+        "group projective add projective homogenous start -- ref {}",
+        task_ref
+    );
     // t0 = y0 * z1
     // t1 = y1 * z0
     // u0 = x0 * z1
@@ -340,7 +349,10 @@ pub fn group_projective_into_affine<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective into affine start -- ref {}", task_ref);
+    println!(
+        "group projective into affine homogenous start -- ref {}",
+        task_ref
+    );
 
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
 
@@ -373,7 +385,10 @@ pub fn group_projective_scalar_mul<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective scalar mul start -- ref {}", task_ref);
+    println!(
+        "group projective scalar mul homogenous start -- ref {}",
+        task_ref
+    );
 
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();

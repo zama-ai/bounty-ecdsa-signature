@@ -45,7 +45,7 @@ pub fn group_projective_double<
     let task_ref = rand::thread_rng().gen_range(0..1000);
 
     #[cfg(feature = "high_level_timing")]
-    println!("group projective double start -- ref {}", task_ref);
+    println!("group projective double jacobian start -- ref {}", task_ref);
 
     let (a, b) = rayon::join(
         || square_mod::<NB, _>(x, p, server_key),
@@ -118,7 +118,7 @@ pub fn group_projective_add_projective<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective add start -- ref {}", task_ref);
+    println!("group projective add jacobian start -- ref {}", task_ref);
 
     // z0z0 = z0^2
     // z1z1 = z1^2
@@ -238,7 +238,7 @@ pub fn group_projective_scalar_mul<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective scalar mul start -- ref {}", task_ref);
+    println!("group projective scalar mul jacobian start -- ref {}", task_ref);
 
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();
@@ -335,7 +335,7 @@ pub fn group_projective_into_affine<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective into affine start -- ref {}", task_ref);
+    println!("group projective into affine jacobian start -- ref {}", task_ref);
 
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
     let z_inv2 = square_mod::<NB, _>(&z_inv, p, server_key);

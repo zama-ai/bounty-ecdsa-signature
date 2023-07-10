@@ -12,17 +12,20 @@ use tfhe::{
     shortint::parameters::PARAM_MESSAGE_2_CARRY_2,
 };
 
+#[cfg(not(feature = "jacobian"))]
+use crate::ops::group_homogenous::{
+    group_projective_add_projective, group_projective_double, group_projective_into_affine,
+    group_projective_scalar_mul,
+};
+#[cfg(feature = "jacobian")]
+use crate::ops::group_jacobian::{
+    group_projective_add_projective, group_projective_double, group_projective_into_affine,
+    group_projective_scalar_mul,
+};
 use crate::{
     ecdsa::ecdsa_sign,
     helper::{format, from_bigint, to_bigint, u256_from_decimal_string},
-    ops::{
-        add_mod, double_mod,
-        group_homogenous::{
-            group_projective_add_projective, group_projective_double, group_projective_into_affine,
-            group_projective_scalar_mul,
-        },
-        inverse_mod, mul_mod, mul_mod_bitwise, pow_mod,
-    },
+    ops::{add_mod, double_mod, inverse_mod, mul_mod, mul_mod_bitwise, pow_mod},
 };
 
 pub mod ecdsa;
