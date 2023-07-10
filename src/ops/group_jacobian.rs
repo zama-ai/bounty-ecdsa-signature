@@ -178,13 +178,13 @@ pub fn group_projective_add_projective<
         },
         || square_mod::<NB, _>(&add_mod::<NB, _>(z0, z1, p, server_key), p, server_key),
     );
-    let x_prime = sub_mod::<NB, _>(
+    let mut x_prime = sub_mod::<NB, _>(
         &sub_mod::<NB, _>(&r2, &j, p, server_key),
         &double_mod::<NB, _>(&v, p, server_key),
         p,
         server_key,
     );
-    let (y_prime, z_prime) = rayon::join(
+    let (mut y_prime, mut z_prime) = rayon::join(
         || {
             sub_mod::<NB, _>(
                 &mul_mod::<NB, _>(
@@ -212,6 +212,90 @@ pub fn group_projective_add_projective<
             )
         },
     );
+
+    ///////////////////////////////// COPY PASTE FROM HOMOGENOUS - might be buggy /////////////////////////////////
+    // z1'/z0' 0  1
+    //    0    x' x1
+    //    1    x0 x0
+    // x'' =  x' * is_z0_z1_non_zero + (x0 + x1) * not_is_z0_z1_non_zero
+    // y'' =  y' * is_z0_z1_non_zero + (y0 + y1) * not_is_z0_z1_non_zero
+    // z'' =  z' * is_z0_z1_non_zero + (z0 + z1) * not_is_z0_z1_non_zero
+    let (mut is_z0_non_zero, mut is_z1_non_zero) = rayon::join(
+        || server_key.smart_scalar_ne_parallelized(&mut z0.clone(), 0),
+        || server_key.smart_scalar_ne_parallelized(&mut z1.clone(), 0),
+    );
+    server_key.trim_radix_blocks_msb_assign(&mut is_z0_non_zero, NB - 1);
+    server_key.trim_radix_blocks_msb_assign(&mut is_z1_non_zero, NB - 1);
+    let mut is_z0_z1_non_zero =
+        server_key.smart_bitand_parallelized(&mut is_z0_non_zero, &mut is_z1_non_zero);
+    let not_is_z0_z1_non_zero = server_key.smart_sub_parallelized(
+        &mut server_key.create_trivial_radix(1, 1),
+        &mut is_z0_z1_non_zero,
+    );
+
+    let (((mut xp1, mut xp2), (mut yp1, mut yp2)), (mut zp1, mut zp2)) = rayon::join(
+        || {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut x_prime,
+                                &mut is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut server_key
+                                    .smart_add_parallelized(&mut x0.clone(), &mut x1.clone()),
+                                &mut not_is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut y_prime,
+                                &mut is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut server_key
+                                    .smart_add_parallelized(&mut y0.clone(), &mut y1.clone()),
+                                &mut not_is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                    )
+                },
+            )
+        },
+        || {
+            rayon::join(
+                || server_key.smart_mul_parallelized(&mut z_prime, &mut is_z0_z1_non_zero.clone()),
+                || {
+                    server_key.smart_mul_parallelized(
+                        &mut server_key.smart_add_parallelized(&mut z0.clone(), &mut z1.clone()),
+                        &mut not_is_z0_z1_non_zero.clone(),
+                    )
+                },
+            )
+        },
+    );
+
+    ((x_prime, y_prime), z_prime) = rayon::join(
+        || {
+            rayon::join(
+                || server_key.smart_add_parallelized(&mut xp1, &mut xp2),
+                || server_key.smart_add_parallelized(&mut yp1, &mut yp2),
+            )
+        },
+        || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
+    );
+    ///////////////////////////////// END OF COPY PASTE FROM HOMOGENOUS - might be buggy /////////////////////////////////
+
     #[cfg(feature = "high_level_timing")]
     println!(
         "group projective add done in {:.2}s -- ref {}",
