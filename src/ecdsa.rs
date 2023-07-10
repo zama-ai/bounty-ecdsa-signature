@@ -50,7 +50,7 @@ pub fn ecdsa_sign<
         &server_key.create_trivial_radix(generator.0, NB),
         &server_key.create_trivial_radix(generator.1, NB),
         &server_key.create_trivial_radix(1, NB),
-        &k,
+        k,
         q_modulo,
         server_key,
     );
@@ -63,13 +63,13 @@ pub fn ecdsa_sign<
     // r = x
     // s = k^-1 * (m + r * sk)
     let r = modulo_fast::<NB, _>(&x, r_modulo, server_key);
-    let k_inv = inverse_mod::<NB, _>(&k, r_modulo, server_key);
+    let k_inv = inverse_mod::<NB, _>(k, r_modulo, server_key);
     read_client_key(|client_key| {
         println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
     });
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
-        &mul_mod::<NB, _>(&r, &sk, r_modulo, server_key),
+        &mul_mod::<NB, _>(&r, sk, r_modulo, server_key),
         r_modulo,
         server_key,
     );
@@ -94,7 +94,7 @@ pub fn ecdsa_verify<
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
 >(
     public_key: (RadixCiphertext, RadixCiphertext),
-    signature: (RadixCiphertext, RadixCiphertext),
+    mut signature: (RadixCiphertext, RadixCiphertext),
     message: P,
     generator: (P, P),
     p: P,
@@ -140,7 +140,7 @@ pub fn ecdsa_verify<
     let mut is_z_zero = server_key.smart_scalar_eq_parallelized(&mut z_proj, 0);
     let (mut x, _y) =
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
-    let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x, &mut signature.0.clone());
+    let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x, &mut signature.0);
 
     #[cfg(feature = "high_level_timing")]
     println!(

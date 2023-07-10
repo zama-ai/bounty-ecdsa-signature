@@ -9,12 +9,12 @@ use crate::CLIENT_KEY;
 pub fn bigint_ilog2_ceil(value: &BigInt) -> u32 {
     let mut value = value.clone();
     let mut i = 0;
-    if &value == &BigInt::from(0) {
+    if value == BigInt::from(0) {
         0
-    } else if &value == &BigInt::from(1) {
+    } else if value == BigInt::from(1) {
         1
     } else {
-        while &value > &BigInt::from(0) {
+        while value > BigInt::from(0) {
             value >>= 1;
             i += 1;
         }
@@ -25,12 +25,12 @@ pub fn bigint_ilog2_ceil(value: &BigInt) -> u32 {
 pub fn bigint_ilog2_floor(value: &BigInt) -> u32 {
     let mut value = value.clone();
     let mut i = 0;
-    if &value == &BigInt::from(0) {
+    if value == BigInt::from(0) {
         0
-    } else if &value == &BigInt::from(1) {
+    } else if value == BigInt::from(1) {
         1
     } else {
-        while &value > &BigInt::from(1) {
+        while value > BigInt::from(1) {
             value >>= 1;
             i += 1;
         }
@@ -77,7 +77,7 @@ pub fn u256_to_bigint(a: U256) -> BigInt {
 pub fn bigint_to_u256(a: &BigInt) -> U256 {
     let mut res = U256::ZERO;
     for (i, b) in a.to_bytes_le().1.iter().enumerate() {
-        res += U256::from(*b as u8) << (i * 8) as u32;
+        res += U256::from(*b) << (i * 8) as u32;
     }
     res
 }

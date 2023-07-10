@@ -100,6 +100,7 @@ pub fn group_projective_double<
     (x_prime, y_prime, z_prime)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn group_projective_add_affine<
     const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -132,6 +133,7 @@ pub fn group_projective_add_affine<
     todo!()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn group_projective_add_projective<
     const NB: usize,
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -343,8 +345,8 @@ pub fn group_projective_into_affine<
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
 
     let res = rayon::join(
-        || mul_mod::<NB, _>(&x, &z_inv, p, server_key),
-        || mul_mod::<NB, _>(&y, &z_inv, p, server_key),
+        || mul_mod::<NB, _>(x, &z_inv, p, server_key),
+        || mul_mod::<NB, _>(y, &z_inv, p, server_key),
     );
     #[cfg(feature = "high_level_timing")]
     println!(
@@ -386,8 +388,8 @@ pub fn group_projective_scalar_mul<
         let bit_start = Instant::now();
 
         let (mut bit, new_scalar) = rayon::join(
-            || server_key.scalar_bitand_parallelized(&mut scalar.clone(), 1),
-            || server_key.scalar_right_shift_parallelized(&mut scalar.clone(), 1),
+            || server_key.scalar_bitand_parallelized(&scalar, 1),
+            || server_key.scalar_right_shift_parallelized(&scalar, 1),
         );
         server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
         scalar = new_scalar;

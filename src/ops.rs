@@ -47,9 +47,9 @@ pub fn multi_add_mod<
     let mut sum = server_key.extend_radix_with_trivial_zero_blocks_msb(&a[0], extend);
 
     // just sum all elements
-    for i in 1..le {
+    for ai in a {
         //let mut tmp = server_key.extend_radix_with_trivial_zero_blocks_msb(&a[i].clone(), extend);
-        server_key.smart_add_assign_parallelized(&mut sum, &mut a[i].clone());
+        server_key.smart_add_assign_parallelized(&mut sum, &mut ai.clone());
     }
     // only check with p*2^i from high to low
     for i in (0..le).rev() {
@@ -141,7 +141,7 @@ pub fn inverse_mod_trim<
     // assume a < p. (no check)
     let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
     let mut r0 = server_key.create_trivial_radix(p, padded_nb);
-    let mut r1 = a.clone();
+    let mut r1 = a;
     let mut was_done = server_key.create_trivial_radix(0, 1);
     let mut t0 = server_key.create_trivial_radix(0, padded_nb);
     let mut t1 = server_key.create_trivial_radix(1, padded_nb);
@@ -161,8 +161,8 @@ pub fn inverse_mod_trim<
             || server_key.full_propagate_parallelized(&mut q),
             || server_key.full_propagate_parallelized(&mut r),
         );
-        q = server_key.extend_radix_with_trivial_zero_blocks_msb(&mut q, trim);
-        let full_r = server_key.extend_radix_with_trivial_zero_blocks_msb(&mut r, trim);
+        server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut q, trim);
+        let full_r = server_key.extend_radix_with_trivial_zero_blocks_msb(&r, trim);
 
         let tmp = t1.clone();
 
@@ -189,7 +189,7 @@ pub fn inverse_mod_trim<
         if (i % 2 == 0) & (i != 0) {
             r0 = server_key.trim_radix_blocks_msb(&r1.clone(), 1);
             r1 = server_key.trim_radix_blocks_msb(&r.clone(), 1);
-            trim = trim + 1;
+            trim += 1;
         } else {
             r0 = r1.clone();
             r1 = r.clone();
@@ -246,7 +246,7 @@ pub fn inverse_mod_without_trim<
     // assume a < p. (no check)
     let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
     let mut r0 = server_key.create_trivial_radix(p, padded_nb);
-    let mut r1 = a.clone();
+    let mut r1 = a;
     let mut was_done = server_key.create_trivial_radix(0, 1);
     let mut t0 = server_key.create_trivial_radix(0, padded_nb);
     let mut t1 = server_key.create_trivial_radix(1, padded_nb);
@@ -254,8 +254,8 @@ pub fn inverse_mod_without_trim<
 
     // euclidean algorithm
     // NB/2 best case and NB worst case
-    for i in 0..<P as Numeric>::BITS {
-        let now = Instant::now();
+    for _i in 0..<P as Numeric>::BITS {
+        let _now = Instant::now();
         // q, r = r0 / r1
         let (mut q, mut r) =
             server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());

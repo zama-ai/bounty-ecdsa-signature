@@ -70,9 +70,9 @@ pub fn mod_mersenne_coeff<const NB: usize>(
 ) -> RadixCiphertext {
     let (n, p, _, c) = mersenne_coeff(p_coeff);
 
-    let mut a = server_key.scalar_right_shift_parallelized(&x, n as u64);
+    let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
     let mut b =
-        server_key.sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
+        server_key.sub_parallelized(x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
     let len = a.blocks().len();
     if len > NB {
         server_key.trim_radix_blocks_msb_assign(&mut a, len - NB);
@@ -122,8 +122,8 @@ pub fn mod_mersenne<
             &server_key.create_trivial_radix(bigint_to_u256(&c), NB * 3 / 2),
             &a,
         );
-        let x_mod_p = server_key.add_parallelized(&ca, &b);
-        x_mod_p
+        
+        server_key.add_parallelized(&ca, &b)
     };
     let x_mod_p = process(x);
     let x_mod_p2 = process(&x_mod_p);
