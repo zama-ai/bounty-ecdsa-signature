@@ -396,7 +396,7 @@ pub fn mul_mod_bitwise<
     let mut to_add_later = res.clone();
 
     let loop_end = <P as Numeric>::BITS;
-    for i in 0..loop_end {
+    for _i in 0..loop_end {
         #[cfg(feature = "low_level_timing")]
         let bit_start = Instant::now();
 
@@ -426,9 +426,9 @@ pub fn mul_mod_bitwise<
         );
         #[cfg(feature = "low_level_timing")]
         {
-            if (i == 0) | (i == loop_end - 1) {
+            if (_i == 0) | (_i == loop_end - 1) {
                 println!(
-                    "----Mul mod bitwise {i} done in {:.2}s -- ref {}",
+                    "----Mul mod bitwise {_i} done in {:.2}s -- ref {}",
                     bit_start.elapsed().as_secs_f64(),
                     task_ref
                 );
@@ -602,7 +602,7 @@ pub fn pow_mod<
     let mut base = a.clone();
     let mut exponent = b.clone();
     let loop_end = <P as Numeric>::BITS;
-    for i in 0..loop_end {
+    for _i in 0..loop_end {
         #[cfg(feature = "low_level_timing")]
         let bit_start = Instant::now();
 
@@ -630,9 +630,9 @@ pub fn pow_mod<
         );
         #[cfg(feature = "low_level_timing")]
         {
-            if (i == 0) | (i == loop_end - 1) {
+            if (_i == 0) | (_i == loop_end - 1) {
                 println!(
-                    "----pow mod bit {i} done in {:.2}s -- ref {}",
+                    "----pow mod bit {_i} done in {:.2}s -- ref {}",
                     bit_start.elapsed().as_secs_f32(),
                     task_ref,
                 );

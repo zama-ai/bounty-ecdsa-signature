@@ -398,7 +398,7 @@ pub fn group_projective_scalar_mul<
     let mut res_y = server_key.create_trivial_radix(0, NB);
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
-    for i in 0..<P as Numeric>::BITS {
+    for _i in 0..<P as Numeric>::BITS {
         #[cfg(feature = "low_level_timing")]
         let bit_start = Instant::now();
 
@@ -449,8 +449,7 @@ pub fn group_projective_scalar_mul<
                     format(client_key.decrypt_radix::<P>(&tmp_z)),
                 );
                 println!(
-                    "----Scalar mul bit {} done in {:.2}s -- ref {}",
-                    i,
+                    "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
                     bit_start.elapsed().as_secs_f32(),
                     task_ref
                 );

@@ -238,7 +238,10 @@ pub fn group_projective_scalar_mul<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective scalar mul jacobian start -- ref {}", task_ref);
+    println!(
+        "group projective scalar mul jacobian start -- ref {}",
+        task_ref
+    );
 
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();
@@ -248,7 +251,7 @@ pub fn group_projective_scalar_mul<
     let mut res_y = server_key.create_trivial_radix(1, NB);
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
-    for i in 0..<P as Numeric>::BITS {
+    for _i in 0..<P as Numeric>::BITS {
         #[cfg(feature = "high_level_timing")]
         let bit_start = Instant::now();
 
@@ -303,8 +306,7 @@ pub fn group_projective_scalar_mul<
                 format(client_key.decrypt_radix::<P>(&tmp_z)),
             );
             println!(
-                "----Scalar mul bit {} done in {:.2}s -- ref {}",
-                i,
+                "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
                 bit_start.elapsed().as_secs_f32(),
                 task_ref
             );
@@ -335,7 +337,10 @@ pub fn group_projective_into_affine<
     #[cfg(feature = "high_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
     #[cfg(feature = "high_level_timing")]
-    println!("group projective into affine jacobian start -- ref {}", task_ref);
+    println!(
+        "group projective into affine jacobian start -- ref {}",
+        task_ref
+    );
 
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
     let z_inv2 = square_mod::<NB, _>(&z_inv, p, server_key);
