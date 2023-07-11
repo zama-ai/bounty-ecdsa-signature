@@ -95,7 +95,7 @@ pub fn mod_mersenne_coeff<const NB: usize>(
             &mut is_gt,
         ),
     );
-    server_key.full_propagate_parallelized(&mut cab);
+    // server_key.full_propagate_parallelized(&mut cab);
     cab
 }
 
@@ -122,7 +122,7 @@ pub fn mod_mersenne<
             &server_key.create_trivial_radix(bigint_to_u256(&c), NB * 3 / 2),
             &a,
         );
-        
+
         server_key.add_parallelized(&ca, &b)
     };
     let x_mod_p = process(x);
@@ -143,7 +143,7 @@ pub fn mul_mod_mersenne_coeff<const NB: usize>(
 ) -> RadixCiphertext {
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
-    server_key.full_propagate_parallelized(&mut a_expanded);
+    // server_key.full_propagate_parallelized(&mut a_expanded);
     mod_mersenne_coeff::<NB>(&a_expanded, p_coeff, server_key)
 }
 
@@ -166,7 +166,7 @@ pub fn mul_mod_mersenne<
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
-    server_key.full_propagate_parallelized(&mut a_expanded);
+    // server_key.full_propagate_parallelized(&mut a_expanded);
     let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
