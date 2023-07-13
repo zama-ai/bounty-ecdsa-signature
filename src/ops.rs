@@ -103,7 +103,7 @@ pub fn modulo_div_rem<
     b: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    let (_q, mut r) = server_key
+    let (_q, r) = server_key
         .smart_div_rem_parallelized(&mut x.clone(), &mut server_key.create_trivial_radix(b, NB));
     // server_key.full_propagate_parallelized(&mut r);
     r
@@ -155,8 +155,7 @@ pub fn inverse_mod_trim<
         let bit_start = Instant::now();
 
         // q, r = r0 / r1
-        let (mut q, mut r) =
-            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
         // rayon::join(
         //     || server_key.full_propagate_parallelized(&mut q),
         //     || server_key.full_propagate_parallelized(&mut r),
@@ -257,8 +256,7 @@ pub fn inverse_mod_without_trim<
     for _i in 0..<P as Numeric>::BITS {
         let _now = Instant::now();
         // q, r = r0 / r1
-        let (mut q, mut r) =
-            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let (q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
         // rayon::join(
         //     || server_key.full_propagate_parallelized(&mut q),
         //     || server_key.full_propagate_parallelized(&mut r),
@@ -322,7 +320,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
-    // server_key.full_propagate_parallelized(&mut a_expanded);
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     #[cfg(feature = "low_level_timing")]
     println!(
@@ -354,7 +352,7 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
-    // server_key.full_propagate_parallelized(&mut a_expanded);
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     #[cfg(feature = "low_level_timing")]
     println!(
@@ -570,7 +568,7 @@ pub fn double_mod<
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
-    // server_key.full_propagate_parallelized(&mut a_expanded);
+    server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     #[cfg(feature = "low_level_timing")]
     println!(

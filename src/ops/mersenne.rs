@@ -118,17 +118,18 @@ pub fn mod_mersenne<
         );
         server_key.trim_radix_blocks_msb_assign(&mut a, len - NB);
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let ca = server_key.mul_parallelized(
-            &server_key.create_trivial_radix(bigint_to_u256(&c), NB * 3 / 2),
-            &a,
+        let mut ca = server_key.smart_mul_parallelized(
+            &mut server_key.create_trivial_radix(bigint_to_u256(&c), NB * 3 / 2),
+            &mut a,
         );
 
-        server_key.add_parallelized(&ca, &b)
+        server_key.add_parallelized(&mut ca, &mut b)
     };
     let x_mod_p = process(x);
     let x_mod_p2 = process(&x_mod_p);
     let mut x_mod_p3 = process(&x_mod_p2);
     let len = x_mod_p3.blocks().len();
+    //server_key.full_propagate_parallelized(&mut x_mod_p3);
     server_key.trim_radix_blocks_msb_assign(&mut x_mod_p3, len - NB);
     x_mod_p3
 }
@@ -166,7 +167,7 @@ pub fn mul_mod_mersenne<
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
-    // server_key.full_propagate_parallelized(&mut a_expanded);
+    //server_key.full_propagate_parallelized(&mut a_expanded);
     let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
