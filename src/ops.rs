@@ -346,10 +346,10 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     println!("Sub mod start -- ref {}", task_ref);
 
     let mut is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     let mut to_add =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
     server_key.full_propagate_parallelized(&mut a_expanded);
