@@ -636,6 +636,58 @@ pub fn pow_mod<
     res
 }
 
+pub fn inverse_mod_pow<
+    const NB: usize,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync + Send,
+>(
+    a: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    #[cfg(feature = "low_level_timing")]
+    let start_ops = Instant::now();
+    #[cfg(feature = "low_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "low_level_timing")]
+    println!("Inverse mod start -- ref {}", task_ref);
+
+    let mut res = server_key.create_trivial_radix(1, NB);
+    let mut base = a.clone();
+    let mut exponent = p - P::cast_from(2u64);
+    let loop_end = <P as Numeric>::BITS;
+    for _i in 0..loop_end {
+        #[cfg(feature = "low_level_timing")]
+        let bit_start = Instant::now();
+        let b = base.clone();
+        rayon::join(
+            || {
+                if exponent & P::ONE == P::ONE {
+                    res = mul_mod::<NB, _>(&res, &b, p, server_key);
+                }
+                exponent >>= 1;
+            },
+            || base = square_mod::<NB, _>(&base, p, server_key),
+        );
+        #[cfg(feature = "low_level_timing")]
+        {
+            if (_i == 0) | (_i == loop_end - 1) {
+                println!(
+                    "----inverse mod bit {_i} done in {:.2}s -- ref {}",
+                    bit_start.elapsed().as_secs_f32(),
+                    task_ref,
+                );
+            }
+        }
+    }
+    #[cfg(feature = "low_level_timing")]
+    println!(
+        "Inverse mod done in {:.2}s -- ref {}",
+        start_ops.elapsed().as_secs_f64(),
+        task_ref
+    );
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
