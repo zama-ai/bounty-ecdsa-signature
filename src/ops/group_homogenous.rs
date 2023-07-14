@@ -399,7 +399,7 @@ pub fn group_projective_scalar_mul<
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
     for _i in 0..<P as Numeric>::BITS {
-        #[cfg(feature = "low_level_timing")]
+        #[cfg(feature = "high_level_timing")]
         let bit_start = Instant::now();
 
         let (mut bit, new_scalar) = rayon::join(
@@ -432,7 +432,7 @@ pub fn group_projective_scalar_mul<
             || group_projective_double::<NB, _>(&tmp_x, &tmp_y, &tmp_z, p, server_key),
         );
 
-        #[cfg(feature = "low_level_timing")]
+        #[cfg(feature = "high_level_timing")]
         {
             read_client_key(|client_key| {
                 println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
