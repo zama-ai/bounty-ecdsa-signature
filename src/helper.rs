@@ -82,6 +82,14 @@ pub fn bigint_to_u256(a: &BigInt) -> U256 {
     res
 }
 
+pub fn bigint_to_u128(a: &BigInt) -> u128 {
+    let mut res = 0;
+    for (i, b) in a.to_bytes_le().1.iter().enumerate() {
+        res += (*b as u128) << (i * 8);
+    }
+    res
+}
+
 pub fn u256_from_decimal_string(s: &str) -> U256 {
     let mut res = U256::ZERO;
     for c in s.chars() {

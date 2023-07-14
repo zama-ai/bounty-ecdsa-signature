@@ -12,6 +12,7 @@ use tfhe::{
 };
 
 use crate::helper::{format, read_client_key};
+use crate::ops::mersenne::mod_mersenne_fast;
 
 use self::mersenne::{mod_mersenne, mul_mod_mersenne};
 
@@ -19,6 +20,7 @@ pub mod group_homogenous;
 pub mod group_jacobian;
 pub mod mersenne;
 pub mod primitive;
+pub mod secp256k1;
 
 /// a_0 + a_1 + ... + a_n mod p
 pub fn multi_add_mod<
@@ -315,20 +317,14 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
-    let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    let mut to_sub =
-        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
-    server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
-    server_key.full_propagate_parallelized(&mut a_expanded);
-    server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    let res = mod_mersenne_fast::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
         "Add mod done in {:.2}s -- ref {}",
         start_ops.elapsed().as_secs_f64(),
         task_ref
     );
-    a_expanded
+    res
 }
 
 /// a - b mod p
@@ -351,8 +347,8 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
-    server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut b.clone());
-    server_key.full_propagate_parallelized(&mut a_expanded);
+    server_key.sub_assign_parallelized(&mut a_expanded, &mut b.clone());
+    //server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     #[cfg(feature = "low_level_timing")]
     println!(
@@ -563,20 +559,14 @@ pub fn double_mod<
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
-    let mut is_gt = server_key.smart_scalar_gt_parallelized(&mut a_expanded, p);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    let mut to_sub =
-        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
-    server_key.smart_sub_assign_parallelized(&mut a_expanded, &mut to_sub);
-    server_key.full_propagate_parallelized(&mut a_expanded);
-    server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+    let res = mod_mersenne_fast::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
         "Double mod done in {:.2}s -- ref {}",
         start_ops.elapsed().as_secs_f64(),
         task_ref
     );
-    a_expanded
+    res
 }
 
 /// a^b mod p
@@ -661,7 +651,8 @@ mod tests {
     use crate::{
         helper::format,
         ops::{
-            add_mod, double_mod, inverse_mod, mul_mod, mul_mod_constant, multi_add_mod, sub_mod,
+            add_mod, double_mod, inverse_mod, mersenne::mod_mersenne, mul_mod, mul_mod_constant,
+            multi_add_mod, sub_mod,
         },
         CLIENT_KEY,
     };
@@ -894,5 +885,35 @@ mod tests {
         let enc_l =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
         assert_eq!(l as u8, client_key.decrypt_radix::<u8>(&enc_l));
+    }
+
+    #[test]
+    fn parallel_mod_reduc_mul() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
+        const NUM_BLOCK: usize = 4;
+        type Integer = u8;
+        let p: Integer = 251;
+        let x1: Integer = 8;
+        let y1: Integer = 45;
+
+        let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
+        let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
+
+        let now = Instant::now();
+        let _ = mul_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
+        println!("mul_mod: {:.2}s", now.elapsed().as_secs_f32());
+
+        let now = Instant::now();
+        let _ = rayon::join(
+            || {
+                let mut expanded =
+                    server_key.extend_radix_with_trivial_zero_blocks_msb(&ct_x1, NUM_BLOCK);
+                server_key.smart_mul_assign_parallelized(&mut expanded, &mut ct_y1.clone());
+                expanded
+            },
+            || mod_mersenne::<NUM_BLOCK, _>(&ct_x1, p, &server_key),
+        );
+        println!("parallel_mod_mersenne: {:.2}s", now.elapsed().as_secs_f32());
     }
 }
