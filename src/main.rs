@@ -19,8 +19,12 @@ use crate::ops::group_jacobian::{
     group_projective_scalar_mul,
 };
 use crate::{
-    helper::{format, from_bigint, to_bigint, u256_from_decimal_string},
-    ops::{add_mod, double_mod, mul_mod, sub_mod},
+    helper::{format, u256_from_decimal_string},
+    ops::{
+        add_mod, double_mod, mul_mod,
+        native::{add_mod_native, mul_mod_native, sub_mod_native},
+        sub_mod,
+    },
 };
 
 pub mod ecdsa;
@@ -88,19 +92,6 @@ fn main() {
     //(p, x1, y1, x2, y2)
     //};
 
-    let add_mod_int = |x: Integer, y: Integer| -> Integer {
-        let x = to_bigint(x);
-        let y = to_bigint(y);
-        let p = to_bigint(p);
-        from_bigint(&((&x + &y) % &p))
-    };
-    let mul_mod_int = |x: Integer, y: Integer| -> Integer {
-        let x = to_bigint(x);
-        let y = to_bigint(y);
-        let p = to_bigint(p);
-        from_bigint(&((&x * &y) % &p))
-    };
-
     let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
     let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
     let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
@@ -116,7 +107,7 @@ fn main() {
     let elasped = now.elapsed();
     let res = client_key.decrypt_radix::<Integer>(&res);
     println!("{} * 2 mod {} -> {}", format(x1), format(p), format(res));
-    println!("should be {}", format(add_mod_int(x1, x1)));
+    println!("should be {}", format(add_mod_native(x1, x1, p)));
     println!("double mod in {:.2} s\n", elasped.as_secs_f32());
 
     let now = Instant::now();
@@ -130,7 +121,7 @@ fn main() {
         format(p),
         format(res)
     );
-    println!("should be {}", format(add_mod_int(x1, y1)));
+    println!("should be {}", format(add_mod_native(x1, y1, p)));
     println!("add mod in {:.2} s\n", elasped.as_secs_f32());
 
     let now = Instant::now();
@@ -144,6 +135,7 @@ fn main() {
         format(p),
         format(res)
     );
+    println!("should be {}", format(sub_mod_native(x1, y1, p)));
     println!("sub mod in {:.2} s\n", elasped.as_secs_f32());
 
     let now = Instant::now();
@@ -157,7 +149,7 @@ fn main() {
         format(p),
         format(res)
     );
-    println!("should be {}", format(mul_mod_int(x1, y1)));
+    println!("should be {}", format(mul_mod_native(x1, y1, p)));
     println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
 
     //let now = Instant::now();
@@ -170,6 +162,7 @@ fn main() {
     //format(res_decoded)
     //);
     //let elasped = now.elapsed();
+    //println!("should be {}", format(inverse_mod_native(x1, p)));
     //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
     // let now = Instant::now();
@@ -182,6 +175,7 @@ fn main() {
     //     format(p),
     //     format(client_key.decrypt_radix::<Integer>(&res)),
     // );
+    // println!("should be {}", format(pow_mod_native(x1, y1, p)));
     // println!("pow mod in {:.2} s\n", elasped.as_secs_f32());
 
     let now = Instant::now();
