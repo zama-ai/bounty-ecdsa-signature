@@ -1,6 +1,7 @@
 #![feature(iter_array_chunks)]
 #![feature(result_option_inspect)]
-#[allow(unused_imports)]
+#![allow(unused_imports)]
+
 use lazy_static::lazy_static;
 use std::{sync::RwLock, time::Instant};
 use tfhe::{

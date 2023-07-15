@@ -859,7 +859,6 @@ mod tests {
         let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
         let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
 
-        let now = Instant::now();
         let (x_new, y_new, z_new) = group_projective_add_affine::<NUM_BLOCK, _>(
             &ct_x1,
             &ct_y1,
@@ -870,26 +869,13 @@ mod tests {
             p,
             &server_key,
         );
-        let elasped = now.elapsed();
         let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
         let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
         let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-        println!(
-            "{},{},{} + {},{},{} -> {},{},{}",
-            format(x1),
-            format(y1),
-            format(1),
-            format(x2),
-            format(y2),
-            format(1),
-            format(x_dec),
-            format(y_dec),
-            format(z_dec)
-        );
-        println!("group add in {} s", elasped.as_secs_f32());
 
-        let (xp, yp) = group_projective_into_affine_native(x_dec, y_dec, z_dec, p);
-        println!("native: {},{}", format(xp), format(yp));
+        assert_eq!(x_dec, 10);
+        assert_eq!(y_dec, 180);
+        assert_eq!(z_dec, 36);
     }
 
     #[test]
@@ -898,18 +884,11 @@ mod tests {
         let x: u8 = 8;
         let y: u8 = 45;
         let z: u8 = 1;
-        let other_x: u8 = 26;
-        let other_y: u8 = 55;
 
         let (xp, yp, zp) = group_projective_double_native(x, y, z, p);
         let (xn, yn) = group_projective_into_affine_native(xp, yp, zp, p);
 
         assert_eq!(xn, 157);
         assert_eq!(yn, 22);
-
-        let (xp, yp, zp) = group_projective_add_affine_native(x, y, z, other_x, other_y, p);
-        println!("added: {},{},{}", format(xp), format(yp), format(zp));
-        let (xn, yn) = group_projective_into_affine_native(xp, yp, zp, p);
-        println!("added: {},{}", format(xn), format(yn));
     }
 }
