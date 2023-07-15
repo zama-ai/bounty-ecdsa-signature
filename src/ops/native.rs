@@ -90,7 +90,6 @@ pub fn mul_mod_native<
 
 /// a^2 mod p
 pub fn square_mod_native<
-    const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
 >(
     a: P,
@@ -103,7 +102,6 @@ pub fn square_mod_native<
 
 /// a*2 mod p
 pub fn double_mod_native<
-    const NB: usize,
     P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
 >(
     a: P,

@@ -7,8 +7,7 @@ use tfhe::integer::{
     IntegerCiphertext, RadixCiphertext, ServerKey,
 };
 
-use crate::helper::bigint_to_u128;
-use crate::helper::{bigint_ilog2_ceil, to_bigint};
+use crate::helper::{bigint_ilog2_ceil, bigint_to_u128, to_bigint};
 
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k

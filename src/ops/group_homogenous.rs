@@ -11,20 +11,44 @@ use tfhe::{
 
 use crate::{
     helper::{format, read_client_key},
-    ops::{add_mod, double_mod, mul_mod, square_mod, sub_mod},
+    ops::{
+        add_mod, double_mod, mul_mod,
+        native::{
+            add_mod_native, double_mod_native, mul_mod_native, square_mod_native, sub_mod_native,
+        },
+        square_mod, sub_mod,
+    },
 };
 
-use super::inverse_mod;
+use super::{inverse_mod, native::inverse_mod_native};
 
-/// Projective point at infinity in homogeneous coordinates
-pub fn group_projective_zero<const NB: usize>(
-    server_key: &ServerKey,
-) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    (
-        server_key.create_trivial_radix(0, NB),
-        server_key.create_trivial_radix(1, NB),
-        server_key.create_trivial_radix(0, NB),
-    )
+pub fn group_projective_double_native<
+    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
+>(
+    x: P,
+    y: P,
+    z: P,
+    p: P,
+) -> (P, P, P) {
+    // u = 2yz
+    // t = 3x^2 + a * z^2 -> a = 0 so t = 3x^2
+    let u = double_mod_native(mul_mod_native(y, z, p), p);
+    let x2 = square_mod_native(x, p);
+    let t = add_mod_native(double_mod_native(x2, p), x2, p);
+    // v = 2uxy
+    let v = double_mod_native(mul_mod_native(u, mul_mod_native(x, y, p), p), p);
+    // w = t^2 - 2v
+    let w = sub_mod_native(square_mod_native(t, p), double_mod_native(v, p), p);
+    // x' = uw
+    // y' = t(v - w) - 2(uy)^2
+    // z' = u^3
+    let x_prime = mul_mod_native(u, w, p);
+    let uy = mul_mod_native(u, y, p);
+    let uy2 = double_mod_native(square_mod_native(uy, p), p);
+    let y_prime = sub_mod_native(mul_mod_native(t, sub_mod_native(v, w, p), p), uy2, p);
+    let z_prime = mul_mod_native(square_mod_native(u, p), u, p);
+
+    (x_prime, y_prime, z_prime)
 }
 
 pub fn group_projective_double<
@@ -368,6 +392,18 @@ pub fn group_projective_into_affine<
     res
 }
 
+pub fn group_projective_into_affine_native<
+    P: DecomposableInto<u64> + RecomposableFrom<u8> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: P,
+    y: P,
+    z: P,
+    p: P,
+) -> (P, P) {
+    let z_inv = inverse_mod_native(z, p);
+    (mul_mod_native(x, z_inv, p), mul_mod_native(y, z_inv, p))
+}
+
 pub fn group_projective_scalar_mul<
     const NB: usize,
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -464,4 +500,22 @@ pub fn group_projective_scalar_mul<
     );
 
     (res_x, res_y, res_z)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::group_projective_double_native;
+
+    #[test]
+    fn correct_native_group_ops_homogenous() {
+        let p: u8 = 251;
+        let x: u8 = 8;
+        let y: u8 = 45;
+        let z: u8 = 1;
+
+        let (xp, yp, zp) = group_projective_double_native(x, y, z, p);
+        assert_eq!(xp, 12);
+        assert_eq!(yp, 104);
+        assert_eq!(zp, 96);
+    }
 }

@@ -10,9 +10,9 @@ use crate::{
     helper::{format, read_client_key},
     ops::{
         add_mod,
-        group_homogenous::{
+        group_jacobian::{
             group_projective_add_projective, group_projective_into_affine,
-            group_projective_scalar_mul,
+            group_projective_scalar_mul_constant,
         },
         inverse_mod, modulo_fast, mul_mod,
     },
@@ -22,7 +22,12 @@ use crate::{
 /// with prime subgroup generator `x, y` % `q`
 pub fn ecdsa_sign<
     const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64>
+        + RecomposableFrom<u64>
+        + RecomposableFrom<u8>
+        + DecomposableInto<u8>
+        + Copy
+        + Sync,
 >(
     sk: &RadixCiphertext,
     k: &RadixCiphertext,
@@ -41,10 +46,9 @@ pub fn ecdsa_sign<
     println!("ecdsa sign start -- ref {}", task_ref);
 
     println!("Calculating (x, y) = k * G");
-    let (x_proj, y_proj, z_proj) = group_projective_scalar_mul::<NB, _>(
-        &server_key.create_trivial_radix(generator.0, NB),
-        &server_key.create_trivial_radix(generator.1, NB),
-        &server_key.create_trivial_radix(1, NB),
+    let (x_proj, y_proj, z_proj) = group_projective_scalar_mul_constant::<NB, _>(
+        generator.0,
+        generator.1,
         k,
         q_modulo,
         server_key,
@@ -86,13 +90,19 @@ pub fn ecdsa_sign<
 
 pub fn ecdsa_verify<
     const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+    P: DecomposableInto<u64>
+        + RecomposableFrom<u64>
+        + RecomposableFrom<u8>
+        + DecomposableInto<u8>
+        + Copy
+        + Sync,
 >(
-    public_key: (RadixCiphertext, RadixCiphertext),
+    public_key: (P, P),
     mut signature: (RadixCiphertext, RadixCiphertext),
     message: P,
     generator: (P, P),
-    p: P,
+    q_modulo: P,
+    r_modulo: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     #[cfg(feature = "high_level_timing")]
@@ -102,40 +112,39 @@ pub fn ecdsa_verify<
     #[cfg(feature = "high_level_timing")]
     println!("ecdsa verify start -- ref {}", task_ref);
     // s^-1
-    let s_inv = inverse_mod::<NB, _>(&signature.1, p, server_key);
+    let s_inv = inverse_mod::<NB, _>(&signature.1, r_modulo, server_key);
     // u1 = m * s^-1
     let u1 = mul_mod::<NB, _>(
         &s_inv,
         &server_key.create_trivial_radix(message, NB),
-        p,
+        r_modulo,
         server_key,
     );
     // u2 = r * s^-1
-    let u2 = mul_mod::<NB, _>(&s_inv, &signature.0, p, server_key);
+    let u2 = mul_mod::<NB, _>(&s_inv, &signature.0, r_modulo, server_key);
     // (x, y) = u1 * G + u2 * Q
-    let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul::<NB, _>(
-        &server_key.create_trivial_radix(generator.0, NB),
-        &server_key.create_trivial_radix(generator.0, NB),
-        &server_key.create_trivial_radix(1, NB),
+    let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul_constant::<NB, _>(
+        generator.0,
+        generator.1,
         &u1,
-        p,
+        q_modulo,
         server_key,
     );
-    let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul::<NB, _>(
-        &public_key.0,
-        &public_key.1,
-        &server_key.create_trivial_radix(1, NB),
+    let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul_constant::<NB, _>(
+        public_key.0,
+        public_key.1,
         &u2,
-        p,
+        q_modulo,
         server_key,
     );
     let (x_proj, y_proj, mut z_proj) = group_projective_add_projective::<NB, _>(
-        &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, p, server_key,
+        &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, q_modulo, server_key,
     );
     let mut is_z_zero = server_key.smart_scalar_eq_parallelized(&mut z_proj, 0);
-    let (mut x, _y) =
-        group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, p, server_key);
-    let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x, &mut signature.0);
+    let (x, _y) =
+        group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
+    let mut x_mod_scalar = modulo_fast::<NB, _>(&x, r_modulo, server_key);
+    let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x_mod_scalar, &mut signature.0);
 
     #[cfg(feature = "high_level_timing")]
     println!(

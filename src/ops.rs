@@ -220,7 +220,7 @@ pub fn inverse_mod_trim<
         &mut is_gt,
     );
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
-    // server_key.full_propagate_parallelized(&mut inv);
+    server_key.full_propagate_parallelized(&mut inv);
 
     #[cfg(feature = "low_level_timing")]
     println!(

@@ -9,19 +9,273 @@ use tfhe::{
     },
 };
 
-use crate::helper::{format, read_client_key};
+use crate::{
+    helper::{format, read_client_key},
+    ops::native::{add_mod_native, double_mod_native, mul_mod_native, sub_mod_native},
+};
 
-use super::{add_mod, double_mod, inverse_mod, mul_mod, square_mod, sub_mod};
+use super::{
+    add_mod, double_mod, inverse_mod, mul_mod,
+    native::{inverse_mod_native, square_mod_native},
+    square_mod, sub_mod,
+};
 
-/// Projective point at infinity in jacobian coordinates
-pub fn group_projective_zero<const NB: usize>(
+pub fn group_projective_double_native<
+    P: DecomposableInto<u64> + RecomposableFrom<u8> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: P,
+    y: P,
+    z: P,
+    p: P,
+) -> (P, P, P) {
+    // case curve a = 0
+    // a = x^2
+    let a = square_mod_native(x, p);
+    // b = y^2
+    let b = square_mod_native(y, p);
+    // c = b^2
+    let c = square_mod_native(b, p);
+    // d = 2*((x + b)^2-(a + c))
+    let xb2 = square_mod_native(add_mod_native(x, b, p), p);
+    let ac = add_mod_native(a, c, p);
+    let d = double_mod_native(sub_mod_native(xb2, ac, p), p);
+    // e = 3*a
+    let e = add_mod_native(double_mod_native(a, p), a, p);
+    // f = e^2
+    let f = square_mod_native(e, p);
+    // z' = 2*y*z
+    let z_prime = double_mod_native(mul_mod_native(y, z, p), p);
+    // x' = f - 2*d
+    let x_prime = sub_mod_native(f, double_mod_native(d, p), p);
+    // y' = e*(d - x') - 8*c
+    let edx = mul_mod_native(e, sub_mod_native(d, x_prime, p), p);
+    let c2 = double_mod_native(c, p);
+    let c4 = double_mod_native(c2, p);
+    let c8 = double_mod_native(c4, p);
+    let y_prime = sub_mod_native(edx, c8, p);
+
+    (x_prime, y_prime, z_prime)
+}
+
+pub fn group_projective_add_affine_native<
+    P: DecomposableInto<u64> + RecomposableFrom<u8> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: P,
+    y: P,
+    z: P,
+    other_x: P,
+    other_y: P,
+    p: P,
+) -> (P, P, P) {
+    // z1z1 = z1^2
+    let z1z1 = square_mod_native(z, p);
+    // u2 = x2*z1z1
+    let u2 = mul_mod_native(other_x, z1z1, p);
+    // s2 = y2*z1*z1*z1
+    let s2 = mul_mod_native(other_y, mul_mod_native(z1z1, z, p), p);
+    // h = u2 - x1
+    let h = sub_mod_native(u2, x, p);
+    // hh = h^2
+    let hh = square_mod_native(h, p);
+    // i = 4*hh
+    let i = double_mod_native(hh, p);
+    let i = double_mod_native(i, p);
+    // j = h*i
+    let j = mul_mod_native(h, i, p);
+    // r = 2*(s2 - y1)
+    let r = double_mod_native(sub_mod_native(s2, y, p), p);
+    // v = x1*i
+    let v = mul_mod_native(x, i, p);
+    // x3 = r^2 - j - 2*v
+    let x3 = sub_mod_native(
+        square_mod_native(r, p),
+        add_mod_native(j, double_mod_native(v, p), p),
+        p,
+    );
+    // y3 = r*(v - x3) - 2*y1*j
+    let y3 = sub_mod_native(
+        mul_mod_native(r, sub_mod_native(v, x3, p), p),
+        double_mod_native(mul_mod_native(y, j, p), p),
+        p,
+    );
+    // z3 = 2*z1*h
+    let z3 = double_mod_native(mul_mod_native(z, h, p), p);
+
+    (x3, y3, z3)
+}
+
+pub fn group_projective_add_affine<
+    const NB: usize,
+    P: DecomposableInto<u64>
+        + RecomposableFrom<u64>
+        + RecomposableFrom<u8>
+        + DecomposableInto<u8>
+        + Copy
+        + Sync,
+>(
+    x: &RadixCiphertext,
+    y: &RadixCiphertext,
+    z: &RadixCiphertext,
+    other_x: &RadixCiphertext,
+    other_y: &RadixCiphertext,
+    other_flag_bit: &RadixCiphertext,
+    p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    (
-        server_key.create_trivial_radix(1, NB),
-        server_key.create_trivial_radix(1, NB),
-        server_key.create_trivial_radix(0, NB),
-    )
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+
+    #[cfg(feature = "high_level_timing")]
+    println!("group projective add affine start -- ref {}", task_ref);
+
+    // z1z1 = z1^2
+    let z1z1 = square_mod::<NB, _>(&z, p, server_key);
+    // u2 = x2*z1z1
+    // s2 = y2*z1*z1*z1
+    let (u2, s2) = rayon::join(
+        || mul_mod::<NB, _>(&other_x, &z1z1, p, server_key),
+        || {
+            mul_mod::<NB, _>(
+                &other_y,
+                &mul_mod::<NB, _>(&z1z1, &z, p, server_key),
+                p,
+                server_key,
+            )
+        },
+    );
+    // h = u2 - x1
+    let h = sub_mod::<NB, _>(&u2, &x, p, server_key);
+    // hh = h^2
+    let hh = square_mod::<NB, _>(&h, p, server_key);
+    // i = 4*hh
+    let i = double_mod::<NB, _>(&double_mod::<NB, _>(&hh, p, server_key), p, server_key);
+    // j = h*i
+    // v = x1*i
+    let (j, v) = rayon::join(
+        || mul_mod::<NB, _>(&h, &i, p, server_key),
+        || mul_mod::<NB, _>(&x, &i, p, server_key),
+    );
+    // r = 2*(s2 - y1)
+    let r = double_mod::<NB, _>(&sub_mod::<NB, _>(&s2, &y, p, server_key), p, server_key);
+    // x3 = r^2 - j - 2*v
+    // y3 = r*(v - x3) - 2*y1*j
+    // z3 = 2*z1*h
+    let ((mut x3, mut z3), yj2) = rayon::join(
+        || {
+            rayon::join(
+                || {
+                    sub_mod::<NB, _>(
+                        &sub_mod::<NB, _>(
+                            &square_mod::<NB, _>(&r, p, server_key),
+                            &j,
+                            p,
+                            server_key,
+                        ),
+                        &double_mod::<NB, _>(&v, p, server_key),
+                        p,
+                        server_key,
+                    )
+                },
+                || double_mod::<NB, _>(&mul_mod::<NB, _>(&z, &h, p, server_key), p, server_key),
+            )
+        },
+        || mul_mod::<NB, _>(&y, &double_mod::<NB, _>(&j, p, server_key), p, server_key),
+    );
+    let mut y3 = sub_mod::<NB, _>(
+        &mul_mod::<NB, _>(&r, &sub_mod::<NB, _>(&v, &x3, p, server_key), p, server_key),
+        &yj2,
+        p,
+        server_key,
+    );
+
+    // z1'/z0' 0  1
+    //    0    x' x1
+    //    1    x0 x0
+    // x'' =  x' * is_z0_z1_non_zero + (x0 + x1) * not_is_z0_z1_non_zero
+    // y'' =  y' * is_z0_z1_non_zero + (y0 + y1) * not_is_z0_z1_non_zero
+    // z'' =  z' * is_z0_z1_non_zero + (z0 + z1) * not_is_z0_z1_non_zero
+    let (mut is_z0_non_zero, mut is_z1_non_zero) = rayon::join(
+        || server_key.smart_scalar_ne_parallelized(&mut z.clone(), 0),
+        || server_key.smart_scalar_ne_parallelized(&mut other_flag_bit.clone(), 0),
+    );
+    server_key.trim_radix_blocks_msb_assign(&mut is_z0_non_zero, NB - 1);
+    server_key.trim_radix_blocks_msb_assign(&mut is_z1_non_zero, NB - 1);
+    let mut is_z0_z1_non_zero =
+        server_key.smart_bitand_parallelized(&mut is_z0_non_zero, &mut is_z1_non_zero);
+    let not_is_z0_z1_non_zero = server_key.smart_sub_parallelized(
+        &mut server_key.create_trivial_radix(1, 1),
+        &mut is_z0_z1_non_zero,
+    );
+
+    let (((mut xp1, mut xp2), (mut yp1, mut yp2)), (mut zp1, mut zp2)) = rayon::join(
+        || {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            server_key
+                                .smart_mul_parallelized(&mut x3, &mut is_z0_z1_non_zero.clone())
+                        },
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut server_key
+                                    .smart_add_parallelized(&mut x.clone(), &mut other_x.clone()),
+                                &mut not_is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            server_key
+                                .smart_mul_parallelized(&mut y3, &mut is_z0_z1_non_zero.clone())
+                        },
+                        || {
+                            server_key.smart_mul_parallelized(
+                                &mut server_key
+                                    .smart_add_parallelized(&mut y.clone(), &mut other_y.clone()),
+                                &mut not_is_z0_z1_non_zero.clone(),
+                            )
+                        },
+                    )
+                },
+            )
+        },
+        || {
+            rayon::join(
+                || server_key.smart_mul_parallelized(&mut z3, &mut is_z0_z1_non_zero.clone()),
+                || {
+                    server_key.smart_mul_parallelized(
+                        &mut server_key
+                            .smart_add_parallelized(&mut z.clone(), &mut other_flag_bit.clone()),
+                        &mut not_is_z0_z1_non_zero.clone(),
+                    )
+                },
+            )
+        },
+    );
+
+    let ((x_prime, y_prime), z_prime) = rayon::join(
+        || {
+            rayon::join(
+                || server_key.smart_add_parallelized(&mut xp1, &mut xp2),
+                || server_key.smart_add_parallelized(&mut yp1, &mut yp2),
+            )
+        },
+        || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
+    );
+
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective add affine done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+
+    (x_prime, y_prime, z_prime)
 }
 
 pub fn group_projective_double<
@@ -212,7 +466,6 @@ pub fn group_projective_add_projective<
         },
     );
 
-    ///////////////////////////////// COPY PASTE FROM HOMOGENOUS - might be buggy /////////////////////////////////
     // z1'/z0' 0  1
     //    0    x' x1
     //    1    x0 x0
@@ -293,7 +546,6 @@ pub fn group_projective_add_projective<
         },
         || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
     );
-    ///////////////////////////////// END OF COPY PASTE FROM HOMOGENOUS - might be buggy /////////////////////////////////
 
     #[cfg(feature = "high_level_timing")]
     println!(
@@ -330,8 +582,8 @@ pub fn group_projective_scalar_mul<
     let mut tmp_y = y.clone();
     let mut tmp_z = z.clone();
     let mut scalar = scalar.clone();
-    let mut res_x = server_key.create_trivial_radix(1, NB);
-    let mut res_y = server_key.create_trivial_radix(1, NB);
+    let mut res_x = server_key.create_trivial_radix(0, NB);
+    let mut res_y = server_key.create_trivial_radix(0, NB);
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
     for _i in 0..<P as Numeric>::BITS {
@@ -350,18 +602,12 @@ pub fn group_projective_scalar_mul<
                     || {
                         rayon::join(
                             || {
-                                let mut x = server_key
-                                    .smart_mul_parallelized(&mut tmp_x.clone(), &mut bit.clone());
-                                server_key.scalar_add_assign_parallelized(&mut x, 1);
-                                server_key.smart_sub_assign_parallelized(&mut x, &mut bit.clone());
-                                x
+                                server_key
+                                    .smart_mul_parallelized(&mut tmp_x.clone(), &mut bit.clone())
                             },
                             || {
-                                let mut y = server_key
-                                    .smart_mul_parallelized(&mut tmp_y.clone(), &mut bit.clone());
-                                server_key.scalar_add_assign_parallelized(&mut y, 1);
-                                server_key.smart_sub_assign_parallelized(&mut y, &mut bit.clone());
-                                y
+                                server_key
+                                    .smart_mul_parallelized(&mut tmp_y.clone(), &mut bit.clone())
                             },
                         )
                     },
@@ -405,95 +651,100 @@ pub fn group_projective_scalar_mul<
     (res_x, res_y, res_z)
 }
 
-//pub fn group_projective_scalar_mul_constant<
-//const NB: usize,
-//P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
-//>(
-//x: P,
-//y: P,
-//z: P,
-//scalar: &RadixCiphertext,
-//p: P,
-//server_key: &ServerKey,
-//) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-//#[cfg(feature = "high_level_timing")]
-//let ops_start = Instant::now();
-//#[cfg(feature = "high_level_timing")]
-//let task_ref = rand::thread_rng().gen_range(0..1000);
-//#[cfg(feature = "high_level_timing")]
-//println!(
-//"group projective scalar mul jacobian start -- ref {}",
-//task_ref
-//);
+pub fn group_projective_scalar_mul_constant<
+    const NB: usize,
+    P: DecomposableInto<u64>
+        + RecomposableFrom<u64>
+        + RecomposableFrom<u8>
+        + DecomposableInto<u8>
+        + Copy
+        + Sync,
+>(
+    x: P,
+    y: P,
+    scalar: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective scalar mul jacobian start -- ref {}",
+        task_ref
+    );
 
-//let mut tmp_x = x;
-//let mut tmp_y = y;
-//let mut tmp_z = z;
-//let mut scalar = scalar.clone();
-//let mut res_x = server_key.create_trivial_radix(1, NB);
-//let mut res_y = server_key.create_trivial_radix(1, NB);
-//let mut res_z = server_key.create_trivial_radix(0, NB);
+    let mut tmp_x = x;
+    let mut tmp_y = y;
+    let mut scalar = scalar.clone();
+    let mut res_x = server_key.create_trivial_radix(0, NB);
+    let mut res_y = server_key.create_trivial_radix(0, NB);
+    let mut res_z = server_key.create_trivial_radix(0, NB);
 
-//for _i in 0..<P as Numeric>::BITS {
-//#[cfg(feature = "high_level_timing")]
-//let bit_start = Instant::now();
+    for _i in 0..<P as Numeric>::BITS {
+        #[cfg(feature = "high_level_timing")]
+        let bit_start = Instant::now();
 
-//let (mut bit, new_scalar) = rayon::join(
-//|| server_key.scalar_bitand_parallelized(&scalar, 1),
-//|| server_key.scalar_right_shift_parallelized(&scalar, 1),
-//);
-//server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
-//scalar = new_scalar;
-//let ((x_to_add, y_to_add), z_to_add) = rayon::join(
-//|| {
-//rayon::join(
-//|| {
-//let mut x =
-//server_key.smart_mul_parallelized(&mut tmp_x.clone(), &mut bit.clone());
-//server_key.scalar_add_assign_parallelized(&mut x, 1);
-//server_key.smart_sub_assign_parallelized(&mut x, &mut bit.clone());
-//x
-//},
-//|| {
-//let mut y =
-//server_key.smart_mul_parallelized(&mut tmp_y.clone(), &mut bit.clone());
-//server_key.scalar_add_assign_parallelized(&mut y, 1);
-//server_key.smart_sub_assign_parallelized(&mut y, &mut bit.clone());
-//y
-//},
-//)
-//},
-//|| server_key.smart_mul_parallelized(&mut tmp_z.clone(), &mut bit.clone()),
-//);
-//(res_x, res_y, res_z) = group_projective_add_projective::<NB, _>(
-//&res_x, &res_y, &res_z, &x_to_add, &y_to_add, &z_to_add, p, server_key,
-//);
-//#[cfg(feature = "high_level_timing")]
-//read_client_key(|client_key| {
-//println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
-//println!(
-//"Res {},{},{}",
-//format(client_key.decrypt_radix::<P>(&res_x)),
-//format(client_key.decrypt_radix::<P>(&res_y)),
-//format(client_key.decrypt_radix::<P>(&res_z)),
-//);
-//println!("Tmp {},{},{}", format(tmp_x), format(tmp_y), format(tmp_z),);
-//println!(
-//"----Scalar mul bit {_i} done in {:.2}s -- ref {}",
-//bit_start.elapsed().as_secs_f32(),
-//task_ref
-//);
-//});
-//}
+        let (mut bit, new_scalar) = rayon::join(
+            || server_key.scalar_bitand_parallelized(&scalar, 1),
+            || server_key.scalar_right_shift_parallelized(&scalar, 1),
+        );
+        server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+        scalar = new_scalar;
 
-//#[cfg(feature = "high_level_timing")]
-//println!(
-//"group projective scalar mul done in {:.2}s -- ref {}",
-//ops_start.elapsed().as_secs_f64(),
-//task_ref
-//);
-//(res_x, res_y, res_z)
-//}
+        let (x_to_add, y_to_add) = rayon::join(
+            || {
+                server_key.smart_mul_parallelized(
+                    &mut server_key.create_trivial_radix(tmp_x, NB),
+                    &mut bit.clone(),
+                )
+            },
+            || {
+                server_key.smart_mul_parallelized(
+                    &mut server_key.create_trivial_radix(tmp_y, NB),
+                    &mut bit.clone(),
+                )
+            },
+        );
+
+        (res_x, res_y, res_z) = group_projective_add_affine::<NB, _>(
+            &res_x, &res_y, &res_z, &x_to_add, &y_to_add, &bit, p, server_key,
+        );
+
+        (tmp_x, tmp_y) = {
+            let (tmp_x_new, temp_y_new, temp_z_new) =
+                group_projective_double_native(tmp_x, tmp_y, P::ONE, p);
+            group_projective_into_affine_native(tmp_x_new, temp_y_new, temp_z_new, p)
+        };
+
+        #[cfg(feature = "high_level_timing")]
+        read_client_key(|client_key| {
+            println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
+            println!(
+                "Res {},{},{}",
+                format(client_key.decrypt_radix::<P>(&res_x)),
+                format(client_key.decrypt_radix::<P>(&res_y)),
+                format(client_key.decrypt_radix::<P>(&res_z)),
+            );
+            println!("Tmp {},{}", format(tmp_x), format(tmp_y),);
+            println!(
+                "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
+                bit_start.elapsed().as_secs_f32(),
+                task_ref
+            );
+        });
+    }
+
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective scalar mul done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+    (res_x, res_y, res_z)
+}
 
 pub fn group_projective_into_affine<
     const NB: usize,
@@ -532,17 +783,34 @@ pub fn group_projective_into_affine<
     res
 }
 
+pub fn group_projective_into_affine_native<
+    P: DecomposableInto<u64> + RecomposableFrom<u8> + DecomposableInto<u8> + Copy + Sync,
+>(
+    x: P,
+    y: P,
+    z: P,
+    p: P,
+) -> (P, P) {
+    let z_inv = inverse_mod_native(z, p);
+    let z_inv2 = square_mod_native(z_inv, p);
+    let z_inv3 = mul_mod_native(z_inv2, z_inv, p);
+
+    (mul_mod_native(x, z_inv2, p), mul_mod_native(y, z_inv3, p))
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
 
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
-    use crate::helper::{format, set_client_key};
-
-    use super::{
-        group_projective_add_projective, group_projective_double, group_projective_into_affine,
-        group_projective_scalar_mul,
+    use crate::{
+        helper::format,
+        ops::group_jacobian::{
+            group_projective_add_affine, group_projective_add_affine_native,
+            group_projective_double, group_projective_double_native,
+            group_projective_into_affine_native,
+        },
     };
 
     #[test]
@@ -554,15 +822,10 @@ mod tests {
         let p: Integer = 251;
         let x1: Integer = 8;
         let y1: Integer = 45;
-        //let x2: Integer = 26;
-        //let y2: Integer = 55;
 
         let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
         let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
-        //let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
-        //let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
 
-        let now = Instant::now();
         let (x_new, y_new, z_new) = group_projective_double::<NUM_BLOCK, _>(
             &ct_x1,
             &ct_y1,
@@ -570,41 +833,17 @@ mod tests {
             p,
             &server_key,
         );
-        let elasped = now.elapsed();
         let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
         let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
         let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-        println!(
-            "{},{},{} * 2 -> {},{},{}",
-            format(x1),
-            format(y1),
-            format(1),
-            format(x_dec),
-            format(y_dec),
-            format(z_dec)
-        );
-        println!("group double in {:.2} s", elasped.as_secs_f32());
 
-        let now = Instant::now();
-        let (x_aff, y_aff) =
-            group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-        let elasped = now.elapsed();
-        println!(
-            "{},{},{} -> {},{}",
-            format(x_dec),
-            format(y_dec),
-            format(z_dec),
-            format(client_key.decrypt_radix::<Integer>(&x_aff)),
-            format(client_key.decrypt_radix::<Integer>(&y_aff))
-        );
-        println!(
-            "group projective into affine in {:.2}s",
-            elasped.as_secs_f32()
-        );
+        assert_eq!(x_dec, 134);
+        assert_eq!(y_dec, 104);
+        assert_eq!(z_dec, 90);
     }
 
     #[test]
-    fn correct_jacobian_add() {
+    fn correct_jacobian_add_affine() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
         const NUM_BLOCK: usize = 4;
@@ -621,7 +860,7 @@ mod tests {
         let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
 
         let now = Instant::now();
-        let (x_new, y_new, z_new) = group_projective_add_projective::<NUM_BLOCK, _>(
+        let (x_new, y_new, z_new) = group_projective_add_affine::<NUM_BLOCK, _>(
             &ct_x1,
             &ct_y1,
             &client_key.encrypt_radix(1, NUM_BLOCK),
@@ -649,80 +888,28 @@ mod tests {
         );
         println!("group add in {} s", elasped.as_secs_f32());
 
-        let now = Instant::now();
-        let (x_aff, y_aff) =
-            group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-        let elasped = now.elapsed();
-        println!(
-            "{},{},{} -> {},{}",
-            format(x_dec),
-            format(y_dec),
-            format(z_dec),
-            format(client_key.decrypt_radix::<Integer>(&x_aff)),
-            format(client_key.decrypt_radix::<Integer>(&y_aff))
-        );
-        println!(
-            "group projective into affine in {:.2}s",
-            elasped.as_secs_f32()
-        );
+        let (xp, yp) = group_projective_into_affine_native(x_dec, y_dec, z_dec, p);
+        println!("native: {},{}", format(xp), format(yp));
     }
 
     #[test]
-    fn correct_jacobian_scalar_mul() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        set_client_key(&client_key);
+    fn correct_native_group_ops_jacobian() {
+        let p: u8 = 251;
+        let x: u8 = 8;
+        let y: u8 = 45;
+        let z: u8 = 1;
+        let other_x: u8 = 26;
+        let other_y: u8 = 55;
 
-        const NUM_BLOCK: usize = 4;
-        type Integer = u8;
-        let p: Integer = 251;
-        let x1: Integer = 8;
-        let y1: Integer = 45;
-        let x2: Integer = 26;
+        let (xp, yp, zp) = group_projective_double_native(x, y, z, p);
+        let (xn, yn) = group_projective_into_affine_native(xp, yp, zp, p);
 
-        let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
-        let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
-        let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
+        assert_eq!(xn, 157);
+        assert_eq!(yn, 22);
 
-        let now = Instant::now();
-        let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
-            &ct_x1,
-            &ct_y1,
-            &client_key.encrypt_radix(1, NUM_BLOCK),
-            &ct_x2,
-            p,
-            &server_key,
-        );
-        let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-        let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-        let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-        let elasped = now.elapsed();
-        println!(
-            "{},{},{} * {} -> {},{},{}",
-            format(x1),
-            format(y1),
-            format(1),
-            format(x2),
-            format(x_dec),
-            format(y_dec),
-            format(z_dec)
-        );
-        println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
-
-        let now = Instant::now();
-        let (x_aff, y_aff) =
-            group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-        let elasped = now.elapsed();
-        println!(
-            "{},{},{} -> {},{}",
-            format(x_dec),
-            format(y_dec),
-            format(z_dec),
-            format(client_key.decrypt_radix::<Integer>(&x_aff)),
-            format(client_key.decrypt_radix::<Integer>(&y_aff))
-        );
-        println!(
-            "group projective into affine in {:.2}s",
-            elasped.as_secs_f32()
-        );
+        let (xp, yp, zp) = group_projective_add_affine_native(x, y, z, other_x, other_y, p);
+        println!("added: {},{},{}", format(xp), format(yp), format(zp));
+        let (xn, yn) = group_projective_into_affine_native(xp, yp, zp, p);
+        println!("added: {},{}", format(xn), format(yn));
     }
 }
