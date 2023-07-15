@@ -1,25 +1,22 @@
-use rand::thread_rng;
-use rand::Rng;
-use std::process;
 use std::time::Instant;
+
+use rand::Rng;
 use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
-    integer::ClientKey,
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
-        IntegerCiphertext, RadixCiphertext, ServerKey,
+        RadixCiphertext, ServerKey,
     },
 };
 
-use crate::helper::{format, read_client_key};
 use crate::ops::mersenne::mod_mersenne_fast;
 
-use self::mersenne::{mod_mersenne, mul_mod_mersenne};
+use self::mersenne::mul_mod_mersenne;
 
 pub mod group_homogenous;
 pub mod group_jacobian;
 pub mod mersenne;
-pub mod primitive;
+pub mod native;
 pub mod secp256k1;
 
 /// a_0 + a_1 + ... + a_n mod p
@@ -111,6 +108,8 @@ pub fn modulo_div_rem<
     r
 }
 
+/// a^-1 mod p where a*a^-1 = 1 mod p
+#[inline]
 pub fn inverse_mod<
     const NB: usize,
     P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
@@ -693,15 +692,10 @@ mod tests {
     use std::time::Instant;
 
     use num_bigint::BigInt;
-    use rand::{thread_rng, Rng};
-    use tfhe::{
-        core_crypto::prelude::Numeric,
-        integer::{keycache::IntegerKeyCache, IntegerCiphertext, RadixCiphertext},
-        shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
-    };
+
+    use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
     use crate::{
-        helper::format,
         ops::{
             add_mod, double_mod, inverse_mod, mersenne::mod_mersenne, mul_mod, mul_mod_constant,
             multi_add_mod, sub_mod,

@@ -1,12 +1,8 @@
 #![feature(iter_array_chunks)]
 #![feature(result_option_inspect)]
-#![allow(unused_imports)]
-
-use std::{cell::Cell, sync::RwLock, time::Instant};
 
 use lazy_static::lazy_static;
-use num_bigint::BigInt;
-use rand::{thread_rng, Rng};
+use std::{sync::RwLock, time::Instant};
 use tfhe::{
     integer::{keycache::IntegerKeyCache, ClientKey, U256},
     shortint::parameters::PARAM_MESSAGE_2_CARRY_2,
@@ -23,9 +19,8 @@ use crate::ops::group_jacobian::{
     group_projective_scalar_mul,
 };
 use crate::{
-    ecdsa::ecdsa_sign,
     helper::{format, from_bigint, to_bigint, u256_from_decimal_string},
-    ops::{add_mod, double_mod, inverse_mod, mul_mod, mul_mod_bitwise, pow_mod, sub_mod},
+    ops::{add_mod, double_mod, mul_mod, sub_mod},
 };
 
 pub mod ecdsa;
@@ -65,33 +60,33 @@ fn main() {
         (p, x1, y1, x2, y2)
     };
 
-    //#[cfg(not(feature = "go_big"))]
-    //const NUM_BLOCK: usize = 8;
-    //#[cfg(not(feature = "go_big"))]
-    //type Integer = u16;
-    //#[cfg(not(feature = "go_big"))]
-    //let (p, x1, y1, x2, y2) = {
-    //let p: Integer = 65535;
-    //let x1: Integer = 50725;
-    //let y1: Integer = 64006;
-    //let x2: Integer = 34884;
-    //let y2: Integer = 48022;
-    //(p, x1, y1, x2, y2)
-    //};
-
     #[cfg(not(feature = "go_big"))]
-    const NUM_BLOCK: usize = 4;
+    const NUM_BLOCK: usize = 8;
     #[cfg(not(feature = "go_big"))]
-    type Integer = u8;
+    type Integer = u16;
     #[cfg(not(feature = "go_big"))]
     let (p, x1, y1, x2, y2) = {
-        let p: Integer = 251;
-        let x1: Integer = 8;
-        let y1: Integer = 45;
-        let x2: Integer = 26;
-        let y2: Integer = 55;
+        let p: Integer = 65535;
+        let x1: Integer = 50725;
+        let y1: Integer = 64006;
+        let x2: Integer = 34884;
+        let y2: Integer = 48022;
         (p, x1, y1, x2, y2)
     };
+
+    //#[cfg(not(feature = "go_big"))]
+    //const NUM_BLOCK: usize = 4;
+    //#[cfg(not(feature = "go_big"))]
+    //type Integer = u8;
+    //#[cfg(not(feature = "go_big"))]
+    //let (p, x1, y1, x2, y2) = {
+    //let p: Integer = 251;
+    //let x1: Integer = 8;
+    //let y1: Integer = 45;
+    //let x2: Integer = 26;
+    //let y2: Integer = 55;
+    //(p, x1, y1, x2, y2)
+    //};
 
     let add_mod_int = |x: Integer, y: Integer| -> Integer {
         let x = to_bigint(x);
@@ -177,17 +172,17 @@ fn main() {
     //let elasped = now.elapsed();
     //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
-    //// let now = Instant::now();
-    //// let res = pow_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
-    //// let elasped = now.elapsed();
-    //// println!(
-    ////     "{}^{} % {} -> {}",
-    ////     format(x1),
-    ////     format(y1),
-    ////     format(p),
-    ////     format(client_key.decrypt_radix::<Integer>(&res)),
-    //// );
-    //// println!("pow mod in {:.2} s\n", elasped.as_secs_f32());
+    // let now = Instant::now();
+    // let res = pow_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
+    // let elasped = now.elapsed();
+    // println!(
+    //     "{}^{} % {} -> {}",
+    //     format(x1),
+    //     format(y1),
+    //     format(p),
+    //     format(client_key.decrypt_radix::<Integer>(&res)),
+    // );
+    // println!("pow mod in {:.2} s\n", elasped.as_secs_f32());
 
     let now = Instant::now();
     let (x_new, y_new, z_new) = group_projective_double::<NUM_BLOCK, _>(
@@ -241,30 +236,30 @@ fn main() {
     );
     println!("group add in {} s", elasped.as_secs_f32());
 
-    //let now = Instant::now();
-    //let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
-    //&ct_x1,
-    //&ct_y1,
-    //&client_key.encrypt_radix(1, NUM_BLOCK),
-    //&ct_x2,
-    //p,
-    //&server_key,
-    //);
-    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    //let elasped = now.elapsed();
-    //println!(
-    //"{},{},{} * {} -> {},{},{}",
-    //format(x1),
-    //format(y1),
-    //format(1),
-    //format(x2),
-    //format(x_dec),
-    //format(y_dec),
-    //format(z_dec)
-    //);
-    //println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
+    let now = Instant::now();
+    let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
+        &ct_x1,
+        &ct_y1,
+        &client_key.encrypt_radix(1, NUM_BLOCK),
+        &ct_x2,
+        p,
+        &server_key,
+    );
+    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    let elasped = now.elapsed();
+    println!(
+        "{},{},{} * {} -> {},{},{}",
+        format(x1),
+        format(y1),
+        format(1),
+        format(x2),
+        format(x_dec),
+        format(y_dec),
+        format(z_dec)
+    );
+    println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
 
     let now = Instant::now();
     let (x_aff, y_aff) =

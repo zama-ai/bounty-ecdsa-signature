@@ -1,7 +1,7 @@
 use num_bigint::BigInt;
 use tfhe::integer::{
-    block_decomposition::{BlockDecomposer, DecomposableInto, Recomposable, RecomposableFrom},
-    client_key, ClientKey, U256,
+    block_decomposition::{BlockDecomposer, DecomposableInto, RecomposableFrom},
+    ClientKey, U256,
 };
 
 use crate::CLIENT_KEY;

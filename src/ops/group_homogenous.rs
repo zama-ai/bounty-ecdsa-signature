@@ -1,12 +1,11 @@
-use rand::thread_rng;
-use rand::Rng;
-use std::process;
 use std::time::Instant;
+
+use rand::Rng;
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
-        ClientKey, RadixCiphertext, ServerKey,
+        RadixCiphertext, ServerKey,
     },
 };
 

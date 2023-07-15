@@ -1,17 +1,14 @@
-use num_bigint::BigInt;
-use rand::thread_rng;
-use rand::Rng;
-use std::process;
 use std::time::Instant;
+
+use num_bigint::BigInt;
+use rand::Rng;
 use tfhe::integer::{
     block_decomposition::{DecomposableInto, RecomposableFrom},
-    IntegerCiphertext, RadixCiphertext, ServerKey, U256,
+    IntegerCiphertext, RadixCiphertext, ServerKey,
 };
 
 use crate::helper::bigint_to_u128;
-use crate::helper::{
-    bigint_ilog2_ceil, bigint_to_u256, format, read_client_key, to_bigint, u256_to_bigint,
-};
+use crate::helper::{bigint_ilog2_ceil, to_bigint};
 
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
@@ -188,20 +185,12 @@ pub fn mul_mod_mersenne<
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, time::Instant};
+    use std::time::Instant;
 
     use num_bigint::BigInt;
-    use tfhe::{
-        integer::{keycache::IntegerKeyCache, U256},
-        shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
-    };
+    use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
-    use crate::{
-        helper::{
-            bigint_to_u256, format, set_client_key, u256_from_decimal_string, u256_to_bigint,
-        },
-        ops::mersenne::{mersenne_mod_native, mod_mersenne_fast, mul_mod_mersenne},
-    };
+    use crate::ops::mersenne::{mersenne_mod_native, mod_mersenne_fast, mul_mod_mersenne};
 
     use super::{mersenne_coeff, mersenne_coeff_p};
 

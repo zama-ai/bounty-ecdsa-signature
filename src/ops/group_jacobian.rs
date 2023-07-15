@@ -1,7 +1,6 @@
-use rand::thread_rng;
+use std::time::Instant;
+
 use rand::Rng;
-use std::process;
-use std::{task, time::Instant};
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
@@ -405,6 +404,96 @@ pub fn group_projective_scalar_mul<
     );
     (res_x, res_y, res_z)
 }
+
+//pub fn group_projective_scalar_mul_constant<
+//const NB: usize,
+//P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+//>(
+//x: P,
+//y: P,
+//z: P,
+//scalar: &RadixCiphertext,
+//p: P,
+//server_key: &ServerKey,
+//) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
+//#[cfg(feature = "high_level_timing")]
+//let ops_start = Instant::now();
+//#[cfg(feature = "high_level_timing")]
+//let task_ref = rand::thread_rng().gen_range(0..1000);
+//#[cfg(feature = "high_level_timing")]
+//println!(
+//"group projective scalar mul jacobian start -- ref {}",
+//task_ref
+//);
+
+//let mut tmp_x = x;
+//let mut tmp_y = y;
+//let mut tmp_z = z;
+//let mut scalar = scalar.clone();
+//let mut res_x = server_key.create_trivial_radix(1, NB);
+//let mut res_y = server_key.create_trivial_radix(1, NB);
+//let mut res_z = server_key.create_trivial_radix(0, NB);
+
+//for _i in 0..<P as Numeric>::BITS {
+//#[cfg(feature = "high_level_timing")]
+//let bit_start = Instant::now();
+
+//let (mut bit, new_scalar) = rayon::join(
+//|| server_key.scalar_bitand_parallelized(&scalar, 1),
+//|| server_key.scalar_right_shift_parallelized(&scalar, 1),
+//);
+//server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+//scalar = new_scalar;
+//let ((x_to_add, y_to_add), z_to_add) = rayon::join(
+//|| {
+//rayon::join(
+//|| {
+//let mut x =
+//server_key.smart_mul_parallelized(&mut tmp_x.clone(), &mut bit.clone());
+//server_key.scalar_add_assign_parallelized(&mut x, 1);
+//server_key.smart_sub_assign_parallelized(&mut x, &mut bit.clone());
+//x
+//},
+//|| {
+//let mut y =
+//server_key.smart_mul_parallelized(&mut tmp_y.clone(), &mut bit.clone());
+//server_key.scalar_add_assign_parallelized(&mut y, 1);
+//server_key.smart_sub_assign_parallelized(&mut y, &mut bit.clone());
+//y
+//},
+//)
+//},
+//|| server_key.smart_mul_parallelized(&mut tmp_z.clone(), &mut bit.clone()),
+//);
+//(res_x, res_y, res_z) = group_projective_add_projective::<NB, _>(
+//&res_x, &res_y, &res_z, &x_to_add, &y_to_add, &z_to_add, p, server_key,
+//);
+//#[cfg(feature = "high_level_timing")]
+//read_client_key(|client_key| {
+//println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
+//println!(
+//"Res {},{},{}",
+//format(client_key.decrypt_radix::<P>(&res_x)),
+//format(client_key.decrypt_radix::<P>(&res_y)),
+//format(client_key.decrypt_radix::<P>(&res_z)),
+//);
+//println!("Tmp {},{},{}", format(tmp_x), format(tmp_y), format(tmp_z),);
+//println!(
+//"----Scalar mul bit {_i} done in {:.2}s -- ref {}",
+//bit_start.elapsed().as_secs_f32(),
+//task_ref
+//);
+//});
+//}
+
+//#[cfg(feature = "high_level_timing")]
+//println!(
+//"group projective scalar mul done in {:.2}s -- ref {}",
+//ops_start.elapsed().as_secs_f64(),
+//task_ref
+//);
+//(res_x, res_y, res_z)
+//}
 
 pub fn group_projective_into_affine<
     const NB: usize,
