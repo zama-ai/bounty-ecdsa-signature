@@ -125,8 +125,9 @@ pub fn inverse_mod_binary_gcd<
         server_key.create_trivial_radix(1, NB);
     let mut b = server_key.create_trivial_radix(p, NB);
     let mut v = server_key.create_trivial_radix(0, NB);
+    let mut was_done = server_key.create_trivial_radix(0, 1);
     let loop_end = <P as Numeric>::BITS * 2;
-
+    let mut result = server_key.create_trivial_radix(0, NB);
     read_client_key(|server_key| {
         println!(
             "a = {}\nb = {}\nu = {}\nv = {}\n-----",
@@ -244,17 +245,26 @@ pub fn inverse_mod_binary_gcd<
                 .smart_mul_parallelized(&mut v_c2.clone(), &mut a_is_odd.clone())
                 .clone(),
         );
+        let mut done = server_key.smart_scalar_eq_parallelized(&mut a.clone(), 0);
+        let mut never_done = server_key
+            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut was_done);
+        let mut done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
+        server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
+        // inv = inv + done_now * t1
+        let mut update = server_key.smart_mul_parallelized(&mut done_now, &mut v.clone());
+        server_key.smart_add_assign_parallelized(&mut result, &mut update);
         read_client_key(|server_key| {
             println!(
-                "a = {}\nb = {}\nu = {}\nv = {}\n-----",
+                "a = {}\nb = {}\nu = {}\nv = {}\nresult {}\n-----",
                 format(server_key.decrypt_radix::<P>(&a)),
                 format(server_key.decrypt_radix::<P>(&b)),
                 format(server_key.decrypt_radix::<P>(&u)),
                 format(server_key.decrypt_radix::<P>(&v)),
+                format(server_key.decrypt_radix::<P>(&result))
             )
         });
     }
-    v.clone()
+    result.clone()
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
