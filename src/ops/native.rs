@@ -31,7 +31,7 @@ pub fn pow_mod_native<
     let mut base = &a_bigint % &p_bigint;
     let mut exponent = b_bigint;
 
-    while &exponent > &BigInt::from(0) {
+    while exponent > BigInt::from(0) {
         if &exponent % 2 == BigInt::from(1) {
             res = (&res * &base) % &p_bigint;
         }

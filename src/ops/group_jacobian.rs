@@ -104,6 +104,7 @@ pub fn group_projective_add_affine_native<
     (x3, y3, z3)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn group_projective_add_affine<
     const NB: usize,
     P: DecomposableInto<u64>
@@ -131,22 +132,22 @@ pub fn group_projective_add_affine<
     println!("group projective add affine start -- ref {}", task_ref);
 
     // z1z1 = z1^2
-    let z1z1 = square_mod::<NB, _>(&z, p, server_key);
+    let z1z1 = square_mod::<NB, _>(z, p, server_key);
     // u2 = x2*z1z1
     // s2 = y2*z1*z1*z1
     let (u2, s2) = rayon::join(
-        || mul_mod::<NB, _>(&other_x, &z1z1, p, server_key),
+        || mul_mod::<NB, _>(other_x, &z1z1, p, server_key),
         || {
             mul_mod::<NB, _>(
-                &other_y,
-                &mul_mod::<NB, _>(&z1z1, &z, p, server_key),
+                other_y,
+                &mul_mod::<NB, _>(&z1z1, z, p, server_key),
                 p,
                 server_key,
             )
         },
     );
     // h = u2 - x1
-    let h = sub_mod::<NB, _>(&u2, &x, p, server_key);
+    let h = sub_mod::<NB, _>(&u2, x, p, server_key);
     // hh = h^2
     let hh = square_mod::<NB, _>(&h, p, server_key);
     // i = 4*hh
@@ -155,10 +156,10 @@ pub fn group_projective_add_affine<
     // v = x1*i
     let (j, v) = rayon::join(
         || mul_mod::<NB, _>(&h, &i, p, server_key),
-        || mul_mod::<NB, _>(&x, &i, p, server_key),
+        || mul_mod::<NB, _>(x, &i, p, server_key),
     );
     // r = 2*(s2 - y1)
-    let r = double_mod::<NB, _>(&sub_mod::<NB, _>(&s2, &y, p, server_key), p, server_key);
+    let r = double_mod::<NB, _>(&sub_mod::<NB, _>(&s2, y, p, server_key), p, server_key);
     // x3 = r^2 - j - 2*v
     // y3 = r*(v - x3) - 2*y1*j
     // z3 = 2*z1*h
@@ -178,10 +179,10 @@ pub fn group_projective_add_affine<
                         server_key,
                     )
                 },
-                || double_mod::<NB, _>(&mul_mod::<NB, _>(&z, &h, p, server_key), p, server_key),
+                || double_mod::<NB, _>(&mul_mod::<NB, _>(z, &h, p, server_key), p, server_key),
             )
         },
-        || mul_mod::<NB, _>(&y, &double_mod::<NB, _>(&j, p, server_key), p, server_key),
+        || mul_mod::<NB, _>(y, &double_mod::<NB, _>(&j, p, server_key), p, server_key),
     );
     let mut y3 = sub_mod::<NB, _>(
         &mul_mod::<NB, _>(&r, &sub_mod::<NB, _>(&v, &x3, p, server_key), p, server_key),
@@ -800,17 +801,12 @@ pub fn group_projective_into_affine_native<
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
 
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
-    use crate::{
-        helper::format,
-        ops::group_jacobian::{
-            group_projective_add_affine, group_projective_add_affine_native,
-            group_projective_double, group_projective_double_native,
-            group_projective_into_affine_native,
-        },
+    use crate::ops::group_jacobian::{
+        group_projective_add_affine, group_projective_double, group_projective_double_native,
+        group_projective_into_affine_native,
     };
 
     #[test]

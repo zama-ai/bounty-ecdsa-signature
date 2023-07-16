@@ -1,25 +1,23 @@
-#![feature(iter_array_chunks)]
-#![feature(result_option_inspect)]
 #![allow(unused_imports)]
 
-use lazy_static::lazy_static;
-use std::{sync::RwLock, time::Instant};
+use fhe::helper::set_client_key;
+use std::time::Instant;
 use tfhe::{
-    integer::{keycache::IntegerKeyCache, ClientKey, U256},
+    integer::{keycache::IntegerKeyCache, U256},
     shortint::parameters::PARAM_MESSAGE_2_CARRY_2,
 };
 
 #[cfg(not(feature = "jacobian"))]
-use crate::ops::group_homogenous::{
+use fhe::ops::group_homogenous::{
     group_projective_add_projective, group_projective_double, group_projective_into_affine,
     group_projective_scalar_mul,
 };
 #[cfg(feature = "jacobian")]
-use crate::ops::group_jacobian::{
+use fhe::ops::group_jacobian::{
     group_projective_add_projective, group_projective_double, group_projective_into_affine,
     group_projective_scalar_mul,
 };
-use crate::{
+use fhe::{
     helper::{format, u256_from_decimal_string},
     ops::{
         add_mod, double_mod, inverse_mod, mul_mod,
@@ -28,18 +26,9 @@ use crate::{
     },
 };
 
-pub mod ecdsa;
-pub mod field;
-pub mod helper;
-pub mod ops;
-
-lazy_static! {
-    pub static ref CLIENT_KEY: RwLock<Option<ClientKey>> = RwLock::new(None);
-}
-
 fn main() {
     let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-    *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
+    set_client_key(&client_key);
 
     #[cfg(feature = "go_big")]
     const NUM_BLOCK: usize = 128;

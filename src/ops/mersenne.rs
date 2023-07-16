@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure_call)]
+
 use std::time::Instant;
 
 use num_bigint::BigInt;
@@ -84,8 +86,8 @@ pub fn mod_mersenne<
         server_key.trim_radix_blocks_msb_assign(&mut a, len - (NB + c_blocks));
         // b must be at least NB long
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let mut ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-        server_key.add_parallelized(&mut ca, &mut b)
+        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+        server_key.add_parallelized(&ca, &b)
     })(&x);
 
     // second pass % NB + c_blocks blocks
@@ -101,8 +103,8 @@ pub fn mod_mersenne<
         server_key.trim_radix_blocks_msb_assign(&mut a, len - (NB + 1));
         // b must be at least NB long
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let mut ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-        server_key.add_parallelized(&mut ca, &mut b)
+        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+        server_key.add_parallelized(&ca, &b)
     })(&x_mod_p);
 
     // final pass % NB + 1 blocks
@@ -115,8 +117,8 @@ pub fn mod_mersenne<
         let len = x.blocks().len();
         server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let mut ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-        server_key.add_parallelized(&mut b, &mut ca)
+        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+        server_key.add_parallelized(&b, &ca)
     })(&x_mod_p2);
 
     let len = x_mod_p3.blocks().len();
@@ -145,8 +147,8 @@ pub fn mod_mersenne_fast<
     server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
     // b must be at least NB long
     server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-    let mut ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-    let mut x_mod_p = server_key.add_parallelized(&mut b, &mut ca);
+    let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+    let mut x_mod_p = server_key.add_parallelized(&b, &ca);
     let len = x_mod_p.blocks().len();
     server_key.trim_radix_blocks_msb_assign(&mut x_mod_p, len - NB);
     x_mod_p

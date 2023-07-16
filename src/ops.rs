@@ -140,12 +140,12 @@ pub fn inverse_mod_binary_gcd<
 
     for _ in 0..loop_end {
         // if a is even -> a = a/2, u = u/2
-        let mut a_is_odd = server_key.scalar_bitand_parallelized(&mut a.clone(), 1);
+        let mut a_is_odd = server_key.scalar_bitand_parallelized(&a, 1);
         server_key.trim_radix_blocks_msb_assign(&mut a_is_odd, NB - 1);
         let a_is_even = server_key
             .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_is_odd);
 
-        let a_c1 = server_key.scalar_right_shift_parallelized(&mut a.clone(), 1);
+        let a_c1 = server_key.scalar_right_shift_parallelized(&a, 1);
         let b_c1 = b.clone();
 
         let u_div_2 = mul_mod::<NB, _>(
@@ -160,47 +160,45 @@ pub fn inverse_mod_binary_gcd<
         // if a < b then (a, u, b, v) ← (b, v, a, u)
         let mut a_lt_b = server_key.smart_lt_parallelized(&mut a.clone(), &mut b.clone());
         server_key.trim_radix_blocks_msb_assign(&mut a_lt_b, NB - 1);
-        let a_ge_b = server_key
+        let mut a_ge_b = server_key
             .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_lt_b);
-        let (sa, su, sb, sv) = (b.clone(), v.clone(), a.clone(), u.clone());
+        let (mut sa, mut su, mut sb, mut sv) = (b.clone(), v.clone(), a.clone(), u.clone());
         let sa_c2 = server_key.smart_add_parallelized(
             &mut server_key
-                .smart_mul_parallelized(&mut sa.clone(), &mut a_lt_b.clone())
+                .smart_mul_parallelized(&mut sa, &mut a_lt_b)
                 .clone(),
             &mut server_key
-                .smart_mul_parallelized(&mut a.clone(), &mut a_ge_b.clone())
+                .smart_mul_parallelized(&mut a, &mut a_ge_b)
                 .clone(),
         );
         let sb_c2 = server_key.smart_add_parallelized(
             &mut server_key
-                .smart_mul_parallelized(&mut sb.clone(), &mut a_lt_b.clone())
+                .smart_mul_parallelized(&mut sb, &mut a_lt_b)
                 .clone(),
             &mut server_key
-                .smart_mul_parallelized(&mut b.clone(), &mut a_ge_b.clone())
+                .smart_mul_parallelized(&mut b, &mut a_ge_b)
                 .clone(),
         );
         let su_c2 = server_key.smart_add_parallelized(
             &mut server_key
-                .smart_mul_parallelized(&mut su.clone(), &mut a_lt_b.clone())
+                .smart_mul_parallelized(&mut su, &mut a_lt_b)
                 .clone(),
             &mut server_key
-                .smart_mul_parallelized(&mut u.clone(), &mut a_ge_b.clone())
+                .smart_mul_parallelized(&mut u, &mut a_ge_b)
                 .clone(),
         );
         let sv_c2 = server_key.smart_add_parallelized(
             &mut server_key
-                .smart_mul_parallelized(&mut sv.clone(), &mut a_lt_b.clone())
+                .smart_mul_parallelized(&mut sv, &mut a_lt_b)
                 .clone(),
             &mut server_key
-                .smart_mul_parallelized(&mut v.clone(), &mut a_ge_b.clone())
+                .smart_mul_parallelized(&mut v, &mut a_ge_b)
                 .clone(),
         );
-        let a_c2 = server_key.scalar_right_shift_parallelized(
-            &mut server_key.sub_parallelized(&mut sa_c2.clone(), &mut sb_c2.clone()),
-            1,
-        );
+        let a_c2 = server_key
+            .scalar_right_shift_parallelized(&server_key.sub_parallelized(&sa_c2, &sb_c2), 1);
 
-        let u_s_v = sub_mod::<NB, _>(&mut su_c2.clone(), &mut sv_c2.clone(), p, server_key);
+        let u_s_v = sub_mod::<NB, _>(&su_c2, &sv_c2, p, server_key);
         let u_s_v_d2 = mul_mod::<NB, _>(
             &u_s_v,
             &server_key.create_trivial_radix(126u64, NB), // TODO: fix this
@@ -505,7 +503,7 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
-    server_key.sub_assign_parallelized(&mut a_expanded, &mut b.clone());
+    server_key.sub_assign_parallelized(&mut a_expanded, b);
     //server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
     #[cfg(feature = "low_level_timing")]
