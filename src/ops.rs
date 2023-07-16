@@ -149,7 +149,7 @@ pub fn inverse_mod_binary_gcd<
 
         let u_div_2 = mul_mod::<NB, _>(
             &u,
-            &server_key.create_trivial_radix(126u64, NB),
+            &server_key.create_trivial_radix(126u64, NB), // TODO: fix this
             p,
             server_key,
         ); // test for 251
@@ -202,7 +202,7 @@ pub fn inverse_mod_binary_gcd<
         let u_s_v = sub_mod::<NB, _>(&mut su_c2.clone(), &mut sv_c2.clone(), p, server_key);
         let u_s_v_d2 = mul_mod::<NB, _>(
             &u_s_v,
-            &server_key.create_trivial_radix(126u64, NB),
+            &server_key.create_trivial_radix(126u64, NB), // TODO: fix this
             p,
             server_key,
         );
