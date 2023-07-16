@@ -139,32 +139,32 @@ fn main() {
     //println!("should be {}", format(sub_mod_native(x1, y1, p)));
     //println!("sub mod in {:.2} s\n", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let res = mul_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
-    let elasped = now.elapsed();
-    let res = client_key.decrypt_radix::<Integer>(&res);
-    println!(
-        "{} * {} mod {} -> {}",
-        format(x1),
-        format(y1),
-        format(p),
-        format(res)
-    );
-    println!("should be {}", format(mul_mod_native(x1, y1, p)));
-    println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
-
     //let now = Instant::now();
-    //let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
-    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
-    //println!(
-    //"{}^-1 % {} -> {}",
-    //format(x1),
-    //format(p),
-    //format(res_decoded)
-    //);
+    //let res = mul_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
     //let elasped = now.elapsed();
-    //println!("should be {}", format(inverse_mod_native(x1, p)));
-    //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
+    //let res = client_key.decrypt_radix::<Integer>(&res);
+    //println!(
+    //"{} * {} mod {} -> {}",
+    //format(x1),
+    //format(y1),
+    //format(p),
+    //format(res)
+    //);
+    //println!("should be {}", format(mul_mod_native(x1, y1, p)));
+    //println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
+
+    let now = Instant::now();
+    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
+    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    println!(
+        "{}^-1 % {} -> {}",
+        format(x1),
+        format(p),
+        format(res_decoded)
+    );
+    let elasped = now.elapsed();
+    println!("should be {}", format(inverse_mod_native(x1, p)));
+    println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
     // let now = Instant::now();
     // let res = pow_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
