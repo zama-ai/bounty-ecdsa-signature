@@ -12,6 +12,7 @@ use tfhe::{
 use crate::ops::mersenne::mod_mersenne_fast;
 
 use self::mersenne::mul_mod_mersenne;
+use self::secp256k1::modulo;
 
 pub mod group_homogenous;
 pub mod group_jacobian;
@@ -106,6 +107,154 @@ pub fn modulo_div_rem<
         .smart_div_rem_parallelized(&mut x.clone(), &mut server_key.create_trivial_radix(b, NB));
     // server_key.full_propagate_parallelized(&mut r);
     r
+}
+
+pub fn inverse_mod_binary_gcd<
+    const NB: usize,
+    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
+>(
+    a: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    // implement binary gcd algorithm
+    // assume a < p. (no check)
+    // This is a draft algo. TODO: remove hard coded test value.
+    let mut a = a.clone();
+    let mut u: tfhe::integer::ciphertext::BaseRadixCiphertext<tfhe::shortint::Ciphertext> =
+        server_key.create_trivial_radix(1, NB);
+    let mut b = server_key.create_trivial_radix(p, NB);
+    let mut v = server_key.create_trivial_radix(0, NB);
+    let loop_end = <P as Numeric>::BITS * 2;
+
+    read_client_key(|server_key| {
+        println!(
+            "a = {}\nb = {}\nu = {}\nv = {}\n-----",
+            format(server_key.decrypt_radix::<P>(&a)),
+            format(server_key.decrypt_radix::<P>(&b)),
+            format(server_key.decrypt_radix::<P>(&u)),
+            format(server_key.decrypt_radix::<P>(&v)),
+        )
+    });
+
+    for _ in 0..loop_end {
+        // if a is even -> a = a/2, u = u/2
+        let mut a_is_odd = server_key.scalar_bitand_parallelized(&mut a.clone(), 1);
+        server_key.trim_radix_blocks_msb_assign(&mut a_is_odd, NB - 1);
+        let a_is_even = server_key
+            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_is_odd);
+
+        let a_c1 = server_key.scalar_right_shift_parallelized(&mut a.clone(), 1);
+        let b_c1 = b.clone();
+
+        let u_div_2 = mul_mod::<NB, _>(
+            &u,
+            &server_key.create_trivial_radix(126u64, NB),
+            p,
+            server_key,
+        ); // test for 251
+        let u_c1 = modulo::<NB>(&u_div_2, server_key);
+        let v_c1 = v.clone();
+
+        // if a < b then (a, u, b, v) ← (b, v, a, u)
+        let mut a_lt_b = server_key.smart_lt_parallelized(&mut a.clone(), &mut b.clone());
+        server_key.trim_radix_blocks_msb_assign(&mut a_lt_b, NB - 1);
+        let a_ge_b = server_key
+            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_lt_b);
+        let (sa, su, sb, sv) = (b.clone(), v.clone(), a.clone(), u.clone());
+        let sa_c2 = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut sa.clone(), &mut a_lt_b.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut a.clone(), &mut a_ge_b.clone())
+                .clone(),
+        );
+        let sb_c2 = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut sb.clone(), &mut a_lt_b.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut b.clone(), &mut a_ge_b.clone())
+                .clone(),
+        );
+        let su_c2 = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut su.clone(), &mut a_lt_b.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut u.clone(), &mut a_ge_b.clone())
+                .clone(),
+        );
+        let sv_c2 = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut sv.clone(), &mut a_lt_b.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut v.clone(), &mut a_ge_b.clone())
+                .clone(),
+        );
+        let a_c2 = server_key.scalar_right_shift_parallelized(
+            &mut server_key.sub_parallelized(&mut sa_c2.clone(), &mut sb_c2.clone()),
+            1,
+        );
+
+        let u_s_v = sub_mod::<NB, _>(&mut su_c2.clone(), &mut sv_c2.clone(), p, server_key);
+        let u_s_v_d2 = mul_mod::<NB, _>(
+            &u_s_v,
+            &server_key.create_trivial_radix(126u64, NB),
+            p,
+            server_key,
+        );
+        let u_c2 = modulo::<NB>(&u_s_v_d2, server_key);
+        let b_c2 = sb_c2;
+        let v_c2 = sv_c2;
+
+        // consolidate c1 and c2
+
+        a = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut a_c1.clone(), &mut a_is_even.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut a_c2.clone(), &mut a_is_odd.clone())
+                .clone(),
+        );
+        b = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut b_c1.clone(), &mut a_is_even.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut b_c2.clone(), &mut a_is_odd.clone())
+                .clone(),
+        );
+        u = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut u_c1.clone(), &mut a_is_even.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut u_c2.clone(), &mut a_is_odd.clone())
+                .clone(),
+        );
+        v = server_key.smart_add_parallelized(
+            &mut server_key
+                .smart_mul_parallelized(&mut v_c1.clone(), &mut a_is_even.clone())
+                .clone(),
+            &mut server_key
+                .smart_mul_parallelized(&mut v_c2.clone(), &mut a_is_odd.clone())
+                .clone(),
+        );
+        read_client_key(|server_key| {
+            println!(
+                "a = {}\nb = {}\nu = {}\nv = {}\n-----",
+                format(server_key.decrypt_radix::<P>(&a)),
+                format(server_key.decrypt_radix::<P>(&b)),
+                format(server_key.decrypt_radix::<P>(&u)),
+                format(server_key.decrypt_radix::<P>(&v)),
+            )
+        });
+    }
+    v.clone()
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
