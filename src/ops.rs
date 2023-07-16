@@ -9,10 +9,10 @@ use tfhe::{
     },
 };
 
+use crate::helper::{format, read_client_key};
 use crate::ops::mersenne::mod_mersenne_fast;
 
 use self::mersenne::mul_mod_mersenne;
-use self::secp256k1::modulo;
 
 pub mod group_homogenous;
 pub mod group_jacobian;
@@ -153,7 +153,7 @@ pub fn inverse_mod_binary_gcd<
             p,
             server_key,
         ); // test for 251
-        let u_c1 = modulo::<NB>(&u_div_2, server_key);
+        let u_c1 = mersenne::mod_mersenne::<NB, _>(&u_div_2, p, server_key);
         let v_c1 = v.clone();
 
         // if a < b then (a, u, b, v) ← (b, v, a, u)
@@ -206,7 +206,7 @@ pub fn inverse_mod_binary_gcd<
             p,
             server_key,
         );
-        let u_c2 = modulo::<NB>(&u_s_v_d2, server_key);
+        let u_c2 = mersenne::mod_mersenne::<NB, _>(&u_s_v_d2, p, server_key);
         let b_c2 = sb_c2;
         let v_c2 = sv_c2;
 
