@@ -12,7 +12,7 @@ use tfhe::{
 use crate::helper::{format, read_client_key};
 use crate::ops::mersenne::mod_mersenne_fast;
 
-use self::mersenne::mul_mod_mersenne;
+use self::mersenne::mul_mod_mersenne2;
 
 pub mod group_homogenous;
 pub mod group_jacobian;
@@ -646,7 +646,7 @@ pub fn mul_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    mul_mod_mersenne::<NB, _>(a, b, p, server_key)
+    mul_mod_mersenne2::<NB, _>(a, b, p, server_key)
 }
 
 /// a * b mod p where b is a constant
