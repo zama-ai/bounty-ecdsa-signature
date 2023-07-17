@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use rand::Rng;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
@@ -800,26 +801,47 @@ pub fn group_projective_scalar_mul_constant_windowed<
         i += chunk_size;
 
         #[cfg(feature = "high_level_timing")]
+        println!("----Start: Scalar mul bit {_ic:?}");
+        #[cfg(feature = "high_level_timing")]
         let bit_start = Instant::now();
 
         // get the next W bits
+        let mut tmp_bits = vec![
+            (
+                server_key.create_trivial_radix(0, NB),
+                server_key.create_trivial_radix(0, NB),
+                server_key.create_trivial_radix(0, NB),
+            );
+            chunk_size
+        ];
+        (0..chunk_size)
+            .into_par_iter()
+            .map(|i| {
+                let shifted = server_key.scalar_right_shift_parallelized(&scalar, i as u64);
+                let mut bit = server_key.scalar_bitand_parallelized(&shifted, 1);
+                server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+                (
+                    server_key.smart_sub_parallelized(
+                        &mut server_key.create_trivial_radix(P::ONE, 1),
+                        &mut bit,
+                    ),
+                    bit,
+                    shifted,
+                )
+            })
+            .collect_into_vec(&mut tmp_bits);
         let mut bits = vec![];
         let mut not_bits = vec![];
-        for _ in 0..chunk_size {
-            let (mut bit, new_scalar) = rayon::join(
-                || server_key.scalar_bitand_parallelized(&scalar, 1),
-                || server_key.scalar_right_shift_parallelized(&scalar, 1),
-            );
-            server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
-            scalar = new_scalar;
-            not_bits.push(
-                server_key.smart_sub_parallelized(
-                    &mut server_key.create_trivial_radix(P::ONE, 1),
-                    &mut bit,
-                ),
-            );
+        for (bit, not_bit, shifted) in tmp_bits {
             bits.push(bit);
+            not_bits.push(not_bit);
+            scalar = shifted;
         }
+        #[cfg(feature = "high_level_timing")]
+        println!(
+            "----Calculating bits done in {:.2}s",
+            bit_start.elapsed().as_secs_f32()
+        );
 
         // get the precomputed values
         let mut points = vec![(P::ZERO, P::ZERO)];
@@ -839,12 +861,16 @@ pub fn group_projective_scalar_mul_constant_windowed<
             server_key.create_trivial_radix(0, NB),
             server_key.create_trivial_radix(0, NB),
         );
+        #[cfg(feature = "high_level_timing")]
+        let now = Instant::now();
         for (i, point) in points
             .iter()
             .enumerate()
             .take(2usize.pow(chunk_size as u32))
             .skip(1)
         {
+            #[cfg(feature = "high_level_timing")]
+            let now = Instant::now();
             let mut selected_bit = match i & 1 == 0 {
                 true => not_bits[0].clone(),
                 false => bits[0].clone(),
@@ -857,21 +883,39 @@ pub fn group_projective_scalar_mul_constant_windowed<
                 server_key
                     .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
             }
-            server_key.smart_add_assign_parallelized(
-                &mut selected_points.0,
-                &mut server_key.smart_mul_parallelized(
-                    &mut server_key.create_trivial_radix(point.0, NB),
-                    &mut selected_bit,
-                ),
+            rayon::join(
+                || {
+                    server_key.smart_add_assign_parallelized(
+                        &mut selected_points.0,
+                        &mut server_key.smart_mul_parallelized(
+                            &mut server_key.create_trivial_radix(point.0, NB),
+                            &mut selected_bit.clone(),
+                        ),
+                    )
+                },
+                || {
+                    server_key.smart_add_assign_parallelized(
+                        &mut selected_points.1,
+                        &mut server_key.smart_mul_parallelized(
+                            &mut server_key.create_trivial_radix(point.1, NB),
+                            &mut selected_bit.clone(),
+                        ),
+                    )
+                },
             );
-            server_key.smart_add_assign_parallelized(
-                &mut selected_points.1,
-                &mut server_key.smart_mul_parallelized(
-                    &mut server_key.create_trivial_radix(point.1, NB),
-                    &mut selected_bit,
-                ),
-            );
+            #[cfg(feature = "high_level_timing")]
+            if i % 100 == 1 {
+                println!(
+                    "----Calculating selector option {i} done in {:.2}s",
+                    now.elapsed().as_secs_f32()
+                );
+            }
         }
+        #[cfg(feature = "high_level_timing")]
+        println!(
+            "----Calculating selector done in {:.2}s",
+            now.elapsed().as_secs_f32()
+        );
 
         // check if all bits are not zero for flag bit
         let mut all_not_zero = bits[0].clone();
