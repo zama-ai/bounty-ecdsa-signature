@@ -9,7 +9,9 @@ use tfhe::integer::{
     IntegerCiphertext, RadixCiphertext, ServerKey,
 };
 
-use crate::helper::{bigint_ilog2_ceil, bigint_to_u128, to_bigint};
+use crate::helper::{bigint_ilog2_ceil, bigint_to_u128, from_bigint, to_bigint};
+
+use super::modulo_fast;
 
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
@@ -45,19 +47,28 @@ pub fn mersenne_coeff_p<P: DecomposableInto<u8> + Copy + Sync>(p: P) -> (u32, Bi
 
 /// Calculate x mod p^2 mod p
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
-pub fn mersenne_mod_native(coeff: &[u32], x: &BigInt) -> BigInt {
-    let (n, p, _, c) = mersenne_coeff(coeff);
+pub fn mersenne_mod_native<P: DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync>(
+    x: P,
+    p: P,
+) -> P {
+    let (n, c) = mersenne_coeff_p(p);
+    let x = to_bigint(x);
+    let p = to_bigint(p);
 
     // x = a*2^n + b
-    let a = x >> n;
-    let b = x - (&a << n);
-    assert_eq!(*x, &a * &BigInt::from(2).pow(n) + &b);
+    let a = &x >> n;
+    let b = &x - (&a << n);
 
     // x % p = (a*2^n + b) % p = c * a + b % p
     let x_mod_p = &a * &c + &b;
-    assert_eq!(x_mod_p, x % &p);
 
-    x_mod_p
+    let a = &x_mod_p >> n;
+    let b = &x_mod_p - (&a << n);
+
+    // x % p = (a*2^n + b) % p = c * a + b % p
+    let x_mod_p = &a * &c + &b;
+
+    from_bigint(&if x_mod_p >= p { x_mod_p - p } else { x_mod_p })
 }
 
 /// Calculate x mod p^2 mod p
@@ -108,22 +119,24 @@ pub fn mod_mersenne<
     })(&x_mod_p);
 
     // final pass % NB + 1 blocks
-    let mut x_mod_p3 = (|x: &RadixCiphertext| {
-        let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
-        let mut b = server_key.smart_sub_parallelized(
-            &mut x.clone(),
-            &mut server_key.scalar_left_shift_parallelized(&a, n as u64),
-        );
-        let len = x.blocks().len();
-        server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
-        server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-        server_key.add_parallelized(&b, &ca)
-    })(&x_mod_p2);
+    //let mut x_mod_p3 = (|x: &RadixCiphertext| {
+    //let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
+    //let mut b = server_key.smart_sub_parallelized(
+    //&mut x.clone(),
+    //&mut server_key.scalar_left_shift_parallelized(&a, n as u64),
+    //);
+    //let len = x.blocks().len();
+    //server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
+    //server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
+    //let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+    //server_key.add_parallelized(&b, &ca)
+    //})(&x_mod_p2);
 
-    let len = x_mod_p3.blocks().len();
-    server_key.trim_radix_blocks_msb_assign(&mut x_mod_p3, len - NB);
-    x_mod_p3
+    //let len = x_mod_p3.blocks().len();
+    //server_key.trim_radix_blocks_msb_assign(&mut x_mod_p3, len - NB);
+    //x_mod_p3
+
+    modulo_fast::<NB, _>(&x_mod_p2, p, server_key)
 }
 
 /// Calculate x mod 2p mod p
@@ -191,18 +204,23 @@ mod tests {
     use num_bigint::BigInt;
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
-    use crate::ops::mersenne::{mersenne_mod_native, mod_mersenne_fast, mul_mod_mersenne};
+    use crate::ops::{
+        mersenne::{mersenne_mod_native, mod_mersenne_fast, mul_mod_mersenne},
+        native::mul_mod_native,
+    };
 
     use super::{mersenne_coeff, mersenne_coeff_p};
 
     #[test]
     fn correct_mersenne_native_mod() {
-        let coeff: &[u32] = &[7, 1];
-        let (_, p, _q, _) = mersenne_coeff(coeff);
-        let p2 = p.pow(2);
-        let x = BigInt::from(16000) % &p2;
+        let p: u128 = 251;
+        let x: u128 = 249;
+        let y: u128 = 250;
+        assert_eq!(mersenne_mod_native(x * y, p), mul_mod_native(x, y, p));
 
-        assert_eq!(mersenne_mod_native(coeff, &x), &x % &p);
+        let x = 123;
+        let y = 250;
+        assert_eq!(mersenne_mod_native(x * y, p), mul_mod_native(x, y, p));
     }
 
     #[test]
@@ -213,8 +231,8 @@ mod tests {
 
         let mul_mod_naive = |x: u128, y: u128| -> u128 { (x * y) % p as u128 };
 
-        let x: u128 = 249;
-        let y: u128 = 248;
+        let x: u128 = 250;
+        let y: u128 = 249;
         let enc_x = client_key.encrypt_radix(x, NUM_BLOCK);
         let enc_y = client_key.encrypt_radix(y, NUM_BLOCK);
         let now = Instant::now();

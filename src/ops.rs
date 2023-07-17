@@ -5,7 +5,7 @@ use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
-        RadixCiphertext, ServerKey,
+        IntegerCiphertext, RadixCiphertext, ServerKey,
     },
 };
 
@@ -83,13 +83,14 @@ pub fn modulo_fast<
     b: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
+    let len = x.blocks().len();
     let mut x = x.clone();
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    server_key.trim_radix_blocks_msb_assign(&mut is_gt, len - 1);
     let mut to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
-    server_key.smart_sub_assign_parallelized(&mut x, &mut to_sub);
-    // server_key.full_propagate_parallelized(&mut x);
+    server_key.sub_assign_parallelized(&mut x, &mut to_sub);
+    server_key.trim_radix_blocks_msb_assign(&mut x, len - NB);
     x
 }
 
@@ -473,7 +474,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
-    let res = mod_mersenne_fast::<NB, _>(&a_expanded, p, server_key);
+    let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
         "Add mod done in {:.2}s -- ref {}",
@@ -715,7 +716,7 @@ pub fn double_mod<
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
-    let res = mod_mersenne_fast::<NB, _>(&a_expanded, p, server_key);
+    let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
         "Double mod done in {:.2}s -- ref {}",
