@@ -790,22 +790,22 @@ pub fn group_projective_scalar_mul_constant_windowed<
     // take the bit, and use it to select the point
     // add the point to the result
     // then double the temporary point W times
-    if let Some(remainder) = (0..<P as Numeric>::BITS)
-        .array_chunks::<W>()
-        .into_remainder()
-        .map(|e| e.collect::<Vec<usize>>())
-    {
-        println!("This algorithm doesn't handle the remainder yet");
-        println!("Remainder {:?}", remainder);
-    }
-    for _ic in (0..<P as Numeric>::BITS).array_chunks::<W>() {
+    let mut i = 0;
+    while i < <P as Numeric>::BITS {
+        let chunk_size = match i + W > <P as Numeric>::BITS {
+            true => <P as Numeric>::BITS - i,
+            false => W,
+        };
+        let _ic = i..i + chunk_size;
+        i += chunk_size;
+
         #[cfg(feature = "high_level_timing")]
         let bit_start = Instant::now();
 
         // get the next W bits
         let mut bits = vec![];
         let mut not_bits = vec![];
-        for _ in 0..W {
+        for _ in 0..chunk_size {
             let (mut bit, new_scalar) = rayon::join(
                 || server_key.scalar_bitand_parallelized(&scalar, 1),
                 || server_key.scalar_right_shift_parallelized(&scalar, 1),
@@ -824,7 +824,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
         // get the precomputed values
         let mut points = vec![(P::ZERO, P::ZERO)];
         let tmp = (tmp_x, tmp_y);
-        for _ in 1..2usize.pow(W as u32) {
+        for _ in 1..2usize.pow(chunk_size as u32) {
             points.push((tmp_x, tmp_y));
             // points are stored in tmp
             (tmp_x, tmp_y) = {
@@ -839,12 +839,12 @@ pub fn group_projective_scalar_mul_constant_windowed<
             server_key.create_trivial_radix(0, NB),
             server_key.create_trivial_radix(0, NB),
         );
-        for i in 1..2usize.pow(W as u32) {
+        for i in 1..2usize.pow(chunk_size as u32) {
             let mut selected_bit = match i & 1 == 0 {
                 true => not_bits[0].clone(),
                 false => bits[0].clone(),
             };
-            for j in 1..W {
+            for j in 1..chunk_size {
                 let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
                     true => not_bits[j].clone(),
                     false => bits[j].clone(),
@@ -870,7 +870,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
 
         // check if all bits are not zero for flag bit
         let mut all_not_zero = bits[0].clone();
-        for i in 1..W {
+        for i in 1..chunk_size {
             server_key.smart_bitor_assign_parallelized(&mut all_not_zero, &mut bits[i]);
         }
 
