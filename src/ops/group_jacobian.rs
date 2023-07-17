@@ -902,19 +902,6 @@ pub fn group_projective_scalar_mul_constant_windowed<
                     .map(|bit| format(client_key.decrypt_radix::<P>(bit)))
                     .collect::<Vec<_>>()
             );
-            let selected_x = client_key.decrypt_radix::<P>(&selected_points.0);
-            let selected_y = client_key.decrypt_radix::<P>(&selected_points.1);
-            let res_x_before = client_key.decrypt_radix::<P>(&res_x_before);
-            let res_y_before = client_key.decrypt_radix::<P>(&res_y_before);
-            let res_z_before = client_key.decrypt_radix::<P>(&res_z_before);
-            let res = group_projective_add_affine_native(
-                res_x_before,
-                res_y_before,
-                res_z_before,
-                selected_x,
-                selected_y,
-                p,
-            );
 
             println!(
                 "Res {},{},{}",
@@ -923,12 +910,10 @@ pub fn group_projective_scalar_mul_constant_windowed<
                 format(client_key.decrypt_radix::<P>(&res_z)),
             );
             println!(
-                "Res native {},{},{}",
-                format(res.0),
-                format(res.1),
-                format(res.2)
+                "Selected = {},{}",
+                format(client_key.decrypt_radix::<P>(&selected_points.0)),
+                format(client_key.decrypt_radix::<P>(&selected_points.1))
             );
-            println!("Selected = {},{}", format(selected_x), format(selected_y));
             println!(
                 "----Scalar mul bit {_ic:?} done in {:.2}s -- ref {}",
                 bit_start.elapsed().as_secs_f32(),
