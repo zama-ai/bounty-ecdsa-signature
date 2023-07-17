@@ -839,7 +839,12 @@ pub fn group_projective_scalar_mul_constant_windowed<
             server_key.create_trivial_radix(0, NB),
             server_key.create_trivial_radix(0, NB),
         );
-        for i in 1..2usize.pow(chunk_size as u32) {
+        for (i, point) in points
+            .iter()
+            .enumerate()
+            .take(2usize.pow(chunk_size as u32))
+            .skip(1)
+        {
             let mut selected_bit = match i & 1 == 0 {
                 true => not_bits[0].clone(),
                 false => bits[0].clone(),
@@ -855,14 +860,14 @@ pub fn group_projective_scalar_mul_constant_windowed<
             server_key.smart_add_assign_parallelized(
                 &mut selected_points.0,
                 &mut server_key.smart_mul_parallelized(
-                    &mut server_key.create_trivial_radix(points[i].0, NB),
+                    &mut server_key.create_trivial_radix(point.0, NB),
                     &mut selected_bit,
                 ),
             );
             server_key.smart_add_assign_parallelized(
                 &mut selected_points.1,
                 &mut server_key.smart_mul_parallelized(
-                    &mut server_key.create_trivial_radix(points[i].1, NB),
+                    &mut server_key.create_trivial_radix(point.1, NB),
                     &mut selected_bit,
                 ),
             );
@@ -870,11 +875,11 @@ pub fn group_projective_scalar_mul_constant_windowed<
 
         // check if all bits are not zero for flag bit
         let mut all_not_zero = bits[0].clone();
-        for i in 1..chunk_size {
-            server_key.smart_bitor_assign_parallelized(&mut all_not_zero, &mut bits[i]);
+        for bit in bits.iter_mut().take(chunk_size).skip(1) {
+            server_key.smart_bitor_assign_parallelized(&mut all_not_zero, bit);
         }
 
-        let (res_x_before, res_y_before, res_z_before) =
+        let (_res_x_before, _res_y_before, _res_z_before) =
             (res_x.clone(), res_y.clone(), res_z.clone());
 
         // add the point
@@ -894,7 +899,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
             println!(
                 "Bits = {:?}",
                 bits.iter()
-                    .map(|bit| format(client_key.decrypt_radix::<P>(&bit)))
+                    .map(|bit| format(client_key.decrypt_radix::<P>(bit)))
                     .collect::<Vec<_>>()
             );
             let selected_x = client_key.decrypt_radix::<P>(&selected_points.0);

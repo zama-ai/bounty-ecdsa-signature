@@ -87,9 +87,9 @@ pub fn modulo_fast<
     let mut x = x.clone();
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, len - 1);
-    let mut to_sub =
+    let to_sub =
         server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
-    server_key.sub_assign_parallelized(&mut x, &mut to_sub);
+    server_key.sub_assign_parallelized(&mut x, &to_sub);
     server_key.trim_radix_blocks_msb_assign(&mut x, len - NB);
     x
 }
