@@ -874,6 +874,9 @@ pub fn group_projective_scalar_mul_constant_windowed<
             server_key.smart_bitor_assign_parallelized(&mut all_not_zero, &mut bits[i]);
         }
 
+        let (res_x_before, res_y_before, res_z_before) =
+            (res_x.clone(), res_y.clone(), res_z.clone());
+
         // add the point
         (res_x, res_y, res_z) = group_projective_add_affine::<NB, _>(
             &res_x,
@@ -894,6 +897,20 @@ pub fn group_projective_scalar_mul_constant_windowed<
                     .map(|bit| format(client_key.decrypt_radix::<P>(&bit)))
                     .collect::<Vec<_>>()
             );
+            let selected_x = client_key.decrypt_radix::<P>(&selected_points.0);
+            let selected_y = client_key.decrypt_radix::<P>(&selected_points.1);
+            let res_x_before = client_key.decrypt_radix::<P>(&res_x_before);
+            let res_y_before = client_key.decrypt_radix::<P>(&res_y_before);
+            let res_z_before = client_key.decrypt_radix::<P>(&res_z_before);
+            let res = group_projective_add_affine_native(
+                res_x_before,
+                res_y_before,
+                res_z_before,
+                selected_x,
+                selected_y,
+                p,
+            );
+
             println!(
                 "Res {},{},{}",
                 format(client_key.decrypt_radix::<P>(&res_x)),
@@ -901,10 +918,12 @@ pub fn group_projective_scalar_mul_constant_windowed<
                 format(client_key.decrypt_radix::<P>(&res_z)),
             );
             println!(
-                "Selected = {},{}",
-                format(client_key.decrypt_radix::<P>(&selected_points.0)),
-                format(client_key.decrypt_radix::<P>(&selected_points.1))
+                "Res native {},{},{}",
+                format(res.0),
+                format(res.1),
+                format(res.2)
             );
+            println!("Selected = {},{}", format(selected_x), format(selected_y));
             println!(
                 "----Scalar mul bit {_ic:?} done in {:.2}s -- ref {}",
                 bit_start.elapsed().as_secs_f32(),
@@ -980,8 +999,8 @@ mod tests {
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
     use crate::ops::group_jacobian::{
-        group_projective_add_affine, group_projective_double, group_projective_double_native,
-        group_projective_into_affine_native,
+        group_projective_add_affine, group_projective_add_affine_native, group_projective_double,
+        group_projective_double_native, group_projective_into_affine_native,
     };
 
     #[test]
@@ -1020,20 +1039,22 @@ mod tests {
         const NUM_BLOCK: usize = 4;
         type Integer = u8;
         let p: Integer = 251;
-        let x1: Integer = 8;
-        let y1: Integer = 45;
-        let x2: Integer = 26;
-        let y2: Integer = 55;
+        let x1: Integer = 48;
+        let y1: Integer = 68;
+        let z1: Integer = 153;
+        let x2: Integer = 56;
+        let y2: Integer = 225;
 
         let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
         let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
+        let ct_z1 = client_key.encrypt_radix(z1, NUM_BLOCK);
         let ct_x2 = client_key.encrypt_radix(x2, NUM_BLOCK);
         let ct_y2 = client_key.encrypt_radix(y2, NUM_BLOCK);
 
         let (x_new, y_new, z_new) = group_projective_add_affine::<NUM_BLOCK, _>(
             &ct_x1,
             &ct_y1,
-            &client_key.encrypt_radix(1, NUM_BLOCK),
+            &ct_z1,
             &ct_x2,
             &ct_y2,
             &client_key.encrypt_radix(1, NUM_BLOCK),
@@ -1044,9 +1065,11 @@ mod tests {
         let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
         let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
 
-        assert_eq!(x_dec, 10);
-        assert_eq!(y_dec, 180);
-        assert_eq!(z_dec, 36);
+        let res = group_projective_add_affine_native(x1, y1, z1, x2, y2, p);
+
+        assert_eq!(x_dec, res.0);
+        assert_eq!(y_dec, res.1);
+        assert_eq!(z_dec, res.2);
     }
 
     #[test]
