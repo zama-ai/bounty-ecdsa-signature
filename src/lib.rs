@@ -1,5 +1,6 @@
 #![feature(iter_array_chunks)]
 #![feature(result_option_inspect)]
+#![allow(unused_imports)]
 
 use std::sync::RwLock;
 

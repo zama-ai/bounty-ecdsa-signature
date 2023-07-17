@@ -1,29 +1,21 @@
 #![allow(unused_imports)]
 
-use fhe::helper::set_client_key;
+use fhe::{
+    helper::{format, set_client_key, u256_from_decimal_string},
+    ops::{
+        add_mod, double_mod,
+        group_jacobian::{
+            group_projective_into_affine, group_projective_scalar_mul_constant_windowed,
+        },
+        inverse_mod, mul_mod,
+        native::{add_mod_native, inverse_mod_native, mul_mod_native, sub_mod_native},
+        sub_mod,
+    },
+};
 use std::time::Instant;
 use tfhe::{
     integer::{keycache::IntegerKeyCache, U256},
     shortint::parameters::PARAM_MESSAGE_2_CARRY_2,
-};
-
-#[cfg(not(feature = "jacobian"))]
-use fhe::ops::group_homogenous::{
-    group_projective_add_projective, group_projective_double, group_projective_into_affine,
-    group_projective_scalar_mul,
-};
-#[cfg(feature = "jacobian")]
-use fhe::ops::group_jacobian::{
-    group_projective_add_projective, group_projective_double, group_projective_into_affine,
-    group_projective_scalar_mul,
-};
-use fhe::{
-    helper::{format, u256_from_decimal_string},
-    ops::{
-        add_mod, double_mod, inverse_mod, mul_mod,
-        native::{add_mod_native, inverse_mod_native, mul_mod_native, sub_mod_native},
-        sub_mod,
-    },
 };
 
 fn main() {
@@ -142,18 +134,18 @@ fn main() {
     //println!("should be {}", format(mul_mod_native(x1, y1, p)));
     //println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
-    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
-    println!(
-        "{}^-1 % {} -> {}",
-        format(x1),
-        format(p),
-        format(res_decoded)
-    );
-    let elasped = now.elapsed();
-    println!("should be {}", format(inverse_mod_native(x1, p)));
-    println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
+    //let now = Instant::now();
+    //let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
+    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    //println!(
+    //"{}^-1 % {} -> {}",
+    //format(x1),
+    //format(p),
+    //format(res_decoded)
+    //);
+    //let elasped = now.elapsed();
+    //println!("should be {}", format(inverse_mod_native(x1, p)));
+    //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
     // let now = Instant::now();
     // let res = pow_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
@@ -220,45 +212,45 @@ fn main() {
     //);
     //println!("group add in {} s", elasped.as_secs_f32());
 
-    //let now = Instant::now();
-    //let (x_new, y_new, z_new) = group_projective_scalar_mul::<NUM_BLOCK, _>(
-    //&ct_x1,
-    //&ct_y1,
-    //&client_key.encrypt_radix(1, NUM_BLOCK),
-    //&ct_x2,
-    //p,
-    //&server_key,
-    //);
-    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    //let elasped = now.elapsed();
-    //println!(
-    //"{},{},{} * {} -> {},{},{}",
-    //format(x1),
-    //format(y1),
-    //format(1),
-    //format(x2),
-    //format(x_dec),
-    //format(y_dec),
-    //format(z_dec)
-    //);
-    //println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
+    let now = Instant::now();
+    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<4, NUM_BLOCK, _>(
+        x1,
+        y1,
+        &ct_x2,
+        p,
+        &server_key,
+    );
 
-    //let now = Instant::now();
-    //let (x_aff, y_aff) =
-    //group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-    //let elasped = now.elapsed();
-    //println!(
-    //"{},{},{} -> {},{}",
-    //format(x_dec),
-    //format(y_dec),
-    //format(z_dec),
-    //format(client_key.decrypt_radix::<Integer>(&x_aff)),
-    //format(client_key.decrypt_radix::<Integer>(&y_aff))
-    //);
-    //println!(
-    //"group projective into affine in {:.2}s",
-    //elasped.as_secs_f32()
-    //);
+    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    let elasped = now.elapsed();
+    println!(
+        "{},{},{} * {} -> {},{},{}",
+        format(x1),
+        format(y1),
+        format(1),
+        format(x2),
+        format(x_dec),
+        format(y_dec),
+        format(z_dec)
+    );
+    println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
+
+    let now = Instant::now();
+    let (x_aff, y_aff) =
+        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+    let elasped = now.elapsed();
+    println!(
+        "{},{},{} -> {},{}",
+        format(x_dec),
+        format(y_dec),
+        format(z_dec),
+        format(client_key.decrypt_radix::<Integer>(&x_aff)),
+        format(client_key.decrypt_radix::<Integer>(&y_aff))
+    );
+    println!(
+        "group projective into affine in {:.2}s",
+        elasped.as_secs_f32()
+    );
 }

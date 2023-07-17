@@ -73,6 +73,11 @@ pub fn group_projective_add_affine_native<
     let u2 = mul_mod_native(other_x, z1z1, p);
     // s2 = y2*z1*z1*z1
     let s2 = mul_mod_native(other_y, mul_mod_native(z1z1, z, p), p);
+
+    if x == u2 && y == s2 {
+        return group_projective_double_native(x, y, z, p);
+    }
+
     // h = u2 - x1
     let h = sub_mod_native(u2, x, p);
     // hh = h^2
@@ -732,6 +737,176 @@ pub fn group_projective_scalar_mul_constant<
             println!("Tmp {},{}", format(tmp_x), format(tmp_y),);
             println!(
                 "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
+                bit_start.elapsed().as_secs_f32(),
+                task_ref
+            );
+        });
+    }
+
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective scalar mul done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+    (res_x, res_y, res_z)
+}
+
+pub fn group_projective_scalar_mul_constant_windowed<
+    const W: usize,
+    const NB: usize,
+    P: DecomposableInto<u64>
+        + RecomposableFrom<u64>
+        + RecomposableFrom<u8>
+        + DecomposableInto<u8>
+        + Copy
+        + Sync,
+>(
+    x: P,
+    y: P,
+    scalar: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective scalar mul jacobian start -- ref {}",
+        task_ref
+    );
+
+    let mut tmp_x = x;
+    let mut tmp_y = y;
+    let mut scalar = scalar.clone();
+    let mut res_x = server_key.create_trivial_radix(0, NB);
+    let mut res_y = server_key.create_trivial_radix(0, NB);
+    let mut res_z = server_key.create_trivial_radix(0, NB);
+
+    // take W bits at a time
+    // for each bit, we have a precomputed points of 2^W - 1 points
+    // take the bit, and use it to select the point
+    // add the point to the result
+    // then double the temporary point W times
+    if let Some(remainder) = (0..<P as Numeric>::BITS)
+        .array_chunks::<W>()
+        .into_remainder()
+        .map(|e| e.collect::<Vec<usize>>())
+    {
+        println!("This algorithm doesn't handle the remainder yet");
+        println!("Remainder {:?}", remainder);
+    }
+    for _ic in (0..<P as Numeric>::BITS).array_chunks::<W>() {
+        #[cfg(feature = "high_level_timing")]
+        let bit_start = Instant::now();
+
+        // get the next W bits
+        let mut bits = vec![];
+        let mut not_bits = vec![];
+        for _ in 0..W {
+            let (mut bit, new_scalar) = rayon::join(
+                || server_key.scalar_bitand_parallelized(&scalar, 1),
+                || server_key.scalar_right_shift_parallelized(&scalar, 1),
+            );
+            server_key.trim_radix_blocks_msb_assign(&mut bit, NB - 1);
+            scalar = new_scalar;
+            not_bits.push(
+                server_key.smart_sub_parallelized(
+                    &mut server_key.create_trivial_radix(P::ONE, 1),
+                    &mut bit,
+                ),
+            );
+            bits.push(bit);
+        }
+
+        // get the precomputed values
+        let mut points = vec![(P::ZERO, P::ZERO)];
+        let tmp = (tmp_x, tmp_y);
+        for _ in 1..2usize.pow(W as u32) {
+            points.push((tmp_x, tmp_y));
+            // points are stored in tmp
+            (tmp_x, tmp_y) = {
+                let (tmp_x_new, temp_y_new, temp_z_new) =
+                    group_projective_add_affine_native(tmp_x, tmp_y, P::ONE, tmp.0, tmp.1, p);
+                group_projective_into_affine_native(tmp_x_new, temp_y_new, temp_z_new, p)
+            };
+        }
+
+        // select the points
+        let mut selected_points = (
+            server_key.create_trivial_radix(0, NB),
+            server_key.create_trivial_radix(0, NB),
+        );
+        for i in 1..2usize.pow(W as u32) {
+            let mut selected_bit = match i & 1 == 0 {
+                true => not_bits[0].clone(),
+                false => bits[0].clone(),
+            };
+            for j in 1..W {
+                let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
+                    true => not_bits[j].clone(),
+                    false => bits[j].clone(),
+                };
+                server_key
+                    .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
+            }
+            server_key.smart_add_assign_parallelized(
+                &mut selected_points.0,
+                &mut server_key.smart_mul_parallelized(
+                    &mut server_key.create_trivial_radix(points[i].0, NB),
+                    &mut selected_bit,
+                ),
+            );
+            server_key.smart_add_assign_parallelized(
+                &mut selected_points.1,
+                &mut server_key.smart_mul_parallelized(
+                    &mut server_key.create_trivial_radix(points[i].1, NB),
+                    &mut selected_bit,
+                ),
+            );
+        }
+
+        // check if all bits are not zero for flag bit
+        let mut all_not_zero = bits[0].clone();
+        for i in 1..W {
+            server_key.smart_bitor_assign_parallelized(&mut all_not_zero, &mut bits[i]);
+        }
+
+        // add the point
+        (res_x, res_y, res_z) = group_projective_add_affine::<NB, _>(
+            &res_x,
+            &res_y,
+            &res_z,
+            &selected_points.0,
+            &selected_points.1,
+            &all_not_zero,
+            p,
+            server_key,
+        );
+
+        #[cfg(feature = "high_level_timing")]
+        read_client_key(|client_key| {
+            println!(
+                "Bits = {:?}",
+                bits.iter()
+                    .map(|bit| format(client_key.decrypt_radix::<P>(&bit)))
+                    .collect::<Vec<_>>()
+            );
+            println!(
+                "Res {},{},{}",
+                format(client_key.decrypt_radix::<P>(&res_x)),
+                format(client_key.decrypt_radix::<P>(&res_y)),
+                format(client_key.decrypt_radix::<P>(&res_z)),
+            );
+            println!(
+                "Selected = {},{}",
+                format(client_key.decrypt_radix::<P>(&selected_points.0)),
+                format(client_key.decrypt_radix::<P>(&selected_points.1))
+            );
+            println!(
+                "----Scalar mul bit {_ic:?} done in {:.2}s -- ref {}",
                 bit_start.elapsed().as_secs_f32(),
                 task_ref
             );
