@@ -11,6 +11,7 @@ use fhe::{
         native::{add_mod_native, inverse_mod_native, mul_mod_native, sub_mod_native},
         sub_mod,
     },
+    stats::ProtocolStats,
 };
 use std::time::Instant;
 use tfhe::{
@@ -236,6 +237,7 @@ fn main() {
         format(z_dec)
     );
     println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
+    println!("Stats: {}", ProtocolStats::stats());
 
     let now = Instant::now();
     let (x_aff, y_aff) =

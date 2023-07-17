@@ -9,8 +9,11 @@ use tfhe::{
     },
 };
 
-use crate::helper::{format, read_client_key};
-use crate::ops::mersenne::mod_mersenne_fast;
+use crate::{
+    helper::{format, read_client_key},
+    ops::mersenne::mod_mersenne_fast,
+    stats::{ProtocolLowOps, ProtocolStats},
+};
 
 use self::mersenne::mul_mod_mersenne;
 
@@ -464,7 +467,6 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    #[cfg(feature = "low_level_timing")]
     let start_ops = Instant::now();
     #[cfg(feature = "low_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
@@ -475,12 +477,15 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
     let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
+
+    ProtocolStats::add_time(ProtocolLowOps::AddMod, start_ops.elapsed().as_secs_f32());
     #[cfg(feature = "low_level_timing")]
     println!(
         "Add mod done in {:.2}s -- ref {}",
         start_ops.elapsed().as_secs_f64(),
         task_ref
     );
+
     res
 }
 
@@ -491,7 +496,6 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
     let start_ops = Instant::now();
     #[cfg(feature = "low_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
@@ -507,6 +511,8 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
     server_key.sub_assign_parallelized(&mut a_expanded, b);
     //server_key.full_propagate_parallelized(&mut a_expanded);
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
+
+    ProtocolStats::add_time(ProtocolLowOps::SubMod, start_ops.elapsed().as_secs_f32());
     #[cfg(feature = "low_level_timing")]
     println!(
         "Sub mod done in {:.2}s -- ref {}",
@@ -645,7 +651,10 @@ pub fn mul_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    mul_mod_mersenne::<NB, _>(a, b, p, server_key)
+    let start_ops = Instant::now();
+    let res = mul_mod_mersenne::<NB, _>(a, b, p, server_key);
+    ProtocolStats::add_time(ProtocolLowOps::MulMod, start_ops.elapsed().as_secs_f32());
+    res
 }
 
 /// a * b mod p where b is a constant
@@ -694,7 +703,10 @@ pub fn square_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    mul_mod::<NB, _>(a, a, p, server_key)
+    let start_ops = Instant::now();
+    let res = mul_mod_mersenne::<NB, _>(a, a, p, server_key);
+    ProtocolStats::add_time(ProtocolLowOps::SquareMod, start_ops.elapsed().as_secs_f32());
+    res
 }
 
 /// a*2 mod p
@@ -707,7 +719,6 @@ pub fn double_mod<
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
     let start_ops = Instant::now();
     #[cfg(feature = "low_level_timing")]
     let task_ref = rand::thread_rng().gen_range(0..1000);
@@ -717,6 +728,8 @@ pub fn double_mod<
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
     let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
+
+    ProtocolStats::add_time(ProtocolLowOps::DoubleMod, start_ops.elapsed().as_secs_f32());
     #[cfg(feature = "low_level_timing")]
     println!(
         "Double mod done in {:.2}s -- ref {}",

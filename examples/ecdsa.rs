@@ -2,6 +2,7 @@ use fhe::{
     ecdsa::ecdsa_sign,
     helper::{set_client_key, u256_from_decimal_string},
     ops::secp256k1::prelude::*,
+    stats::ProtocolStats,
 };
 use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
@@ -34,4 +35,5 @@ fn main() {
     );
 
     println!("signature: {:?}", signature);
+    println!("stats: {}", ProtocolStats::stats());
 }

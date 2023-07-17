@@ -11,6 +11,7 @@ pub mod ecdsa;
 pub mod field;
 pub mod helper;
 pub mod ops;
+pub mod stats;
 
 lazy_static! {
     pub static ref CLIENT_KEY: RwLock<Option<ClientKey>> = RwLock::new(None);
