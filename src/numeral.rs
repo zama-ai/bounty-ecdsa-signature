@@ -26,7 +26,7 @@ pub trait Numeral:
     }
 
     fn decrypt(ciphertext: &RadixCiphertext, client_key: &ClientKey) -> Self {
-        client_key.decrypt_radix::<Self>(&ciphertext)
+        client_key.decrypt_radix::<Self>(ciphertext)
     }
 }
 

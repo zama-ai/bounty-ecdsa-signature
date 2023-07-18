@@ -49,15 +49,15 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     let (x, y) =
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
     read_client_key(|client_key| {
-        println!("x = {}", format(client_key.decrypt_radix::<P>(&x)));
-        println!("y = {}", format(client_key.decrypt_radix::<P>(&y)));
+        println!("x = {}", P::decrypt(&x, client_key).format());
+        println!("y = {}", P::decrypt(&y, client_key).format());
     });
     // r = x
     // s = k^-1 * (m + r * sk)
     let r = modulo_fast::<NB, _>(&x, r_modulo, server_key);
     let k_inv = inverse_mod::<NB, _>(k, r_modulo, server_key);
     read_client_key(|client_key| {
-        println!("k^-1 = {}", format(client_key.decrypt_radix::<P>(&k_inv)));
+        println!("k^-1 = {}", P::decrypt(&k_inv, client_key).format());
     });
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
@@ -67,8 +67,8 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     );
     let s = mul_mod::<NB, _>(&k_inv, &mrsk, r_modulo, server_key);
     read_client_key(|client_key| {
-        println!("r = {}", format(client_key.decrypt_radix::<P>(&r)));
-        println!("s = {}", format(client_key.decrypt_radix::<P>(&s)));
+        println!("r = {}", P::decrypt(&r, client_key).format());
+        println!("s = {}", P::decrypt(&s, client_key).format());
     });
 
     #[cfg(feature = "high_level_timing")]
