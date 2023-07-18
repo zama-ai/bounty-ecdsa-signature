@@ -12,7 +12,7 @@ use tfhe::{
 use crate::{
     helper::{format, read_client_key},
     numeral::Numeral,
-    ops::mersenne::mod_mersenne_fast,
+    ops::mersenne::{mod_mersenne, mod_mersenne_fast},
     stats::{ProtocolLowOps, ProtocolStats},
 };
 
@@ -84,9 +84,10 @@ pub fn modulo_fast<const NB: usize, P: Numeral>(
     let len = x.blocks().len();
     let mut x = x.clone();
     let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, len - 1);
-    let to_sub =
-        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
+    //server_key.trim_radix_blocks_msb_assign(&mut is_gt, len - 1);
+    //let to_sub =
+    //server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
+    let to_sub = server_key.smart_scalar_mul_parallelized(&mut is_gt, b);
     server_key.sub_assign_parallelized(&mut x, &to_sub);
     server_key.trim_radix_blocks_msb_assign(&mut x, len - NB);
     x
@@ -486,9 +487,10 @@ pub fn sub_mod<const NB: usize, P: Numeral>(
     println!("Sub mod start -- ref {}", task_ref);
 
     let mut is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
-    server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    let mut to_add =
-        server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+    //server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
+    //let mut to_add =
+    //server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
+    let mut to_add = server_key.smart_scalar_mul_parallelized(&mut is_gt, p);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.sub_assign_parallelized(&mut a_expanded, b);
@@ -649,18 +651,14 @@ pub fn mul_mod_constant<const NB: usize, P: Numeral>(
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_scalar_mul_assign_parallelized(&mut a_expanded, b);
-    let (_q, mut r) = server_key.smart_div_rem_parallelized(
-        &mut a_expanded,
-        &mut server_key.create_trivial_radix(p, NB * 2),
-    );
-    server_key.trim_radix_blocks_msb_assign(&mut r, NB);
+    let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
     #[cfg(feature = "low_level_timing")]
     println!(
         "Mul mod constant done in {:.2}s -- ref {}",
         start_ops.elapsed().as_secs_f64(),
         task_ref
     );
-    r
+    res
 }
 
 /// a^2 mod p
