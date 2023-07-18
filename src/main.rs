@@ -47,33 +47,33 @@ fn main() {
         (p, x1, y1, x2, y2)
     };
 
-    #[cfg(not(feature = "go_big"))]
-    const NUM_BLOCK: usize = 8;
-    #[cfg(not(feature = "go_big"))]
-    type Integer = u16;
-    #[cfg(not(feature = "go_big"))]
-    let (p, x1, y1, x2, y2) = {
-        let p: Integer = 65521;
-        let x1: Integer = 50725;
-        let y1: Integer = 64006;
-        let x2: Integer = 34884;
-        let y2: Integer = 48022;
-        (p, x1, y1, x2, y2)
-    };
-
     //#[cfg(not(feature = "go_big"))]
-    //const NUM_BLOCK: usize = 4;
+    //const NUM_BLOCK: usize = 8;
     //#[cfg(not(feature = "go_big"))]
-    //type Integer = u8;
+    //type Integer = u16;
     //#[cfg(not(feature = "go_big"))]
     //let (p, x1, y1, x2, y2) = {
-    //let p: Integer = 251;
-    //let x1: Integer = 8;
-    //let y1: Integer = 45;
-    //let x2: Integer = 26;
-    //let y2: Integer = 55;
+    //let p: Integer = 65521;
+    //let x1: Integer = 50725;
+    //let y1: Integer = 64006;
+    //let x2: Integer = 34884;
+    //let y2: Integer = 48022;
     //(p, x1, y1, x2, y2)
     //};
+
+    #[cfg(not(feature = "go_big"))]
+    const NUM_BLOCK: usize = 4;
+    #[cfg(not(feature = "go_big"))]
+    type Integer = u8;
+    #[cfg(not(feature = "go_big"))]
+    let (p, x1, y1, x2, y2) = {
+        let p: Integer = 251;
+        let x1: Integer = 8;
+        let y1: Integer = 45;
+        let x2: Integer = 26;
+        let y2: Integer = 55;
+        (p, x1, y1, x2, y2)
+    };
 
     let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
     let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
@@ -93,19 +93,19 @@ fn main() {
     //println!("should be {}", format(add_mod_native(x1, x1, p)));
     //println!("double mod in {:.2} s\n", elasped.as_secs_f32());
 
-    //let now = Instant::now();
-    //let res = add_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
-    //let elasped = now.elapsed();
-    //let res = client_key.decrypt_radix::<Integer>(&res);
-    //println!(
-    //"{} + {} mod {} -> {}",
-    //format(x1),
-    //format(y1),
-    //format(p),
-    //format(res)
-    //);
-    //println!("should be {}", format(add_mod_native(x1, y1, p)));
-    //println!("add mod in {:.2} s\n", elasped.as_secs_f32());
+    let now = Instant::now();
+    let res = add_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
+    let elasped = now.elapsed();
+    let res = client_key.decrypt_radix::<Integer>(&res);
+    println!(
+        "{} + {} mod {} -> {}",
+        format(x1),
+        format(y1),
+        format(p),
+        format(res)
+    );
+    println!("should be {}", format(add_mod_native(x1, y1, p)));
+    println!("add mod in {:.2} s\n", elasped.as_secs_f32());
 
     //let now = Instant::now();
     //let res = sub_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
