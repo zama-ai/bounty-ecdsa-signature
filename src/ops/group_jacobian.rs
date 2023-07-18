@@ -810,7 +810,6 @@ pub fn group_projective_scalar_mul_constant_windowed<
             (
                 server_key.create_trivial_radix(0, NB),
                 server_key.create_trivial_radix(0, NB),
-                server_key.create_trivial_radix(0, NB),
             );
             chunk_size
         ];
@@ -826,17 +825,16 @@ pub fn group_projective_scalar_mul_constant_windowed<
                         &mut bit,
                     ),
                     bit,
-                    shifted,
                 )
             })
             .collect_into_vec(&mut tmp_bits);
         let mut bits = vec![];
         let mut not_bits = vec![];
-        for (bit, not_bit, shifted) in tmp_bits {
-            bits.push(bit);
+        for (not_bit, bit) in tmp_bits {
             not_bits.push(not_bit);
-            scalar = shifted;
+            bits.push(bit);
         }
+        server_key.scalar_right_shift_assign_parallelized(&mut scalar, chunk_size as u64);
         #[cfg(feature = "high_level_timing")]
         println!(
             "----Calculating bits done in {:.2}s",

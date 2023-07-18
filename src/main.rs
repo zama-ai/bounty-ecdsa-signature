@@ -214,7 +214,7 @@ fn main() {
     //println!("group add in {} s", elasped.as_secs_f32());
 
     let now = Instant::now();
-    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<4, NUM_BLOCK, _>(
+    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<3, NUM_BLOCK, _>(
         x1,
         y1,
         &ct_x2,
