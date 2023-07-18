@@ -11,6 +11,7 @@ use tfhe::{
 
 use crate::{
     helper::{format, read_client_key},
+    numeral::Numeral,
     ops::mersenne::mod_mersenne_fast,
     stats::{ProtocolLowOps, ProtocolStats},
 };
@@ -24,10 +25,7 @@ pub mod native;
 pub mod secp256k1;
 
 /// a_0 + a_1 + ... + a_n mod p
-pub fn multi_add_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn multi_add_mod<const NB: usize, P: Numeral>(
     a: &[RadixCiphertext],
     p: P,
     server_key: &ServerKey,
@@ -78,10 +76,7 @@ pub fn multi_add_mod<
 
 /// turn x mod a to x mod b
 /// only if a > b and a < 2b
-pub fn modulo_fast<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn modulo_fast<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     b: P,
     server_key: &ServerKey,
@@ -113,10 +108,7 @@ pub fn modulo_div_rem<
     r
 }
 
-pub fn inverse_mod_binary_gcd<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -271,10 +263,7 @@ pub fn inverse_mod_binary_gcd<
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
 #[inline]
-pub fn inverse_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn inverse_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -283,10 +272,7 @@ pub fn inverse_mod<
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
-pub fn inverse_mod_trim<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -394,10 +380,7 @@ pub fn inverse_mod_trim<
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
-pub fn inverse_mod_without_trim<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn inverse_mod_without_trim<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -460,7 +443,7 @@ pub fn inverse_mod_without_trim<
 }
 
 /// a + b mod p
-pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+pub fn add_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -490,7 +473,7 @@ pub fn add_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
 }
 
 /// a - b mod p
-pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync>(
+pub fn sub_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -523,10 +506,7 @@ pub fn sub_mod<const NB: usize, P: DecomposableInto<u64> + DecomposableInto<u8> 
 }
 
 /// a * b mod p
-pub fn mul_mod_bitwise<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mul_mod_bitwise<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -606,10 +586,7 @@ pub fn mul_mod_bitwise<
 }
 
 /// a * b mod p
-pub fn mul_mod_div_rem<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mul_mod_div_rem<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -642,10 +619,7 @@ pub fn mul_mod_div_rem<
 }
 
 /// a * b mod p
-pub fn mul_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mul_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -659,13 +633,9 @@ pub fn mul_mod<
 
 /// a * b mod p where b is a constant
 /// slower than 12 `add_mod`
-pub fn mul_mod_constant<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
-    S: DecomposableInto<u8> + UnsignedInteger,
->(
+pub fn mul_mod_constant<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
-    b: S,
+    b: P,
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
@@ -695,10 +665,7 @@ pub fn mul_mod_constant<
 
 /// a^2 mod p
 #[inline(always)]
-pub fn square_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn square_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -711,10 +678,7 @@ pub fn square_mod<
 
 /// a*2 mod p
 #[inline(always)]
-pub fn double_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn double_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -740,10 +704,7 @@ pub fn double_mod<
 }
 
 /// a^b mod p
-pub fn pow_mod<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn pow_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -806,10 +767,7 @@ pub fn pow_mod<
     res
 }
 
-pub fn inverse_mod_pow<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync + Send,
->(
+pub fn inverse_mod_pow<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -893,7 +851,7 @@ mod tests {
         println!("8a using addition - {:.2}s", timer.elapsed().as_secs());
 
         let timer = Instant::now();
-        let _enc_8a_mul = mul_mod_constant::<NUM_BLOCK, _, _>(&enc_a, 8u8, p, &server_key);
+        let _enc_8a_mul = mul_mod_constant::<NUM_BLOCK, _>(&enc_a, 8, p, &server_key);
         println!(
             "8a using multiplication - {:.2}s",
             timer.elapsed().as_secs()

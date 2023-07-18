@@ -11,6 +11,7 @@ use tfhe::{
 
 use crate::{
     helper::{format, read_client_key},
+    numeral::Numeral,
     ops::{
         add_mod, double_mod, mul_mod,
         native::{
@@ -22,14 +23,7 @@ use crate::{
 
 use super::{inverse_mod, native::inverse_mod_native};
 
-pub fn group_projective_double_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    x: P,
-    y: P,
-    z: P,
-    p: P,
-) -> (P, P, P) {
+pub fn group_projective_double_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P, P) {
     // u = 2yz
     // t = 3x^2 + a * z^2 -> a = 0 so t = 3x^2
     let u = double_mod_native(mul_mod_native(y, z, p), p);
@@ -51,10 +45,7 @@ pub fn group_projective_double_native<
     (x_prime, y_prime, z_prime)
 }
 
-pub fn group_projective_double<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn group_projective_double<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
     z: &RadixCiphertext,
@@ -127,10 +118,7 @@ pub fn group_projective_double<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn group_projective_add_affine<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
     _x0: &RadixCiphertext,
     _y0: &RadixCiphertext,
     _z0: &RadixCiphertext,
@@ -163,10 +151,7 @@ pub fn group_projective_add_affine<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn group_projective_add_projective<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
     x0: &RadixCiphertext,
     y0: &RadixCiphertext,
     z0: &RadixCiphertext,
@@ -357,10 +342,7 @@ pub fn group_projective_add_projective<
     (x_prime, y_prime, z_prime)
 }
 
-pub fn group_projective_into_affine<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
     z: &RadixCiphertext,
@@ -392,22 +374,12 @@ pub fn group_projective_into_affine<
     res
 }
 
-pub fn group_projective_into_affine_native<
-    P: DecomposableInto<u64> + RecomposableFrom<u8> + DecomposableInto<u8> + Copy + Sync,
->(
-    x: P,
-    y: P,
-    z: P,
-    p: P,
-) -> (P, P) {
+pub fn group_projective_into_affine_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P) {
     let z_inv = inverse_mod_native(z, p);
     (mul_mod_native(x, z_inv, p), mul_mod_native(y, z_inv, p))
 }
 
-pub fn group_projective_scalar_mul<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
     z: &RadixCiphertext,

@@ -1,28 +1,20 @@
 use num_bigint::BigInt;
 use tfhe::integer::block_decomposition::{DecomposableInto, RecomposableFrom};
 
-use crate::helper::{from_bigint, to_bigint};
+use crate::{
+    helper::{from_bigint, to_bigint},
+    numeral::Numeral,
+};
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
 #[inline]
-pub fn inverse_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    p: P,
-) -> P {
+pub fn inverse_mod_native<P: Numeral>(a: P, p: P) -> P {
     pow_mod_native(a, p - P::TWO, p)
 }
 
 /// a^b mod p
 #[inline]
-pub fn pow_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    b: P,
-    p: P,
-) -> P {
+pub fn pow_mod_native<P: Numeral>(a: P, b: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let b_bigint = to_bigint(b);
     let p_bigint = to_bigint(p);
@@ -43,13 +35,7 @@ pub fn pow_mod_native<
 }
 
 /// a + b mod p
-pub fn add_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    b: P,
-    p: P,
-) -> P {
+pub fn add_mod_native<P: Numeral>(a: P, b: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let b_bigint = to_bigint(b);
     let p_bigint = to_bigint(p);
@@ -57,13 +43,7 @@ pub fn add_mod_native<
 }
 
 /// a - b mod p
-pub fn sub_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    b: P,
-    p: P,
-) -> P {
+pub fn sub_mod_native<P: Numeral>(a: P, b: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let b_bigint = to_bigint(b);
     let p_bigint = to_bigint(p);
@@ -75,13 +55,7 @@ pub fn sub_mod_native<
 }
 
 /// a * b mod p
-pub fn mul_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    b: P,
-    p: P,
-) -> P {
+pub fn mul_mod_native<P: Numeral>(a: P, b: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let b_bigint = to_bigint(b);
     let p_bigint = to_bigint(p);
@@ -89,24 +63,14 @@ pub fn mul_mod_native<
 }
 
 /// a^2 mod p
-pub fn square_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    p: P,
-) -> P {
+pub fn square_mod_native<P: Numeral>(a: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let p_bigint = to_bigint(p);
     from_bigint(&((&a_bigint * &a_bigint) % p_bigint))
 }
 
 /// a*2 mod p
-pub fn double_mod_native<
-    P: DecomposableInto<u64> + DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync,
->(
-    a: P,
-    p: P,
-) -> P {
+pub fn double_mod_native<P: Numeral>(a: P, p: P) -> P {
     let a_bigint = to_bigint(a);
     let p_bigint = to_bigint(p);
     from_bigint(&((&a_bigint * 2) % p_bigint))
@@ -120,9 +84,9 @@ mod tests {
 
     #[test]
     fn correct_native_op() {
-        let a = 123;
-        let b = 234;
-        let p = 251;
+        let a: u8 = 123;
+        let b: u8 = 234;
+        let p: u8 = 251;
 
         let res = mul_mod_native(a, b, p);
         assert_eq!(res, 168);

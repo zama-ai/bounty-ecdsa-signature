@@ -2,6 +2,7 @@ use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
+        server_key::{ScalarMultiplier, TwosComplementNegation},
         ClientKey, RadixCiphertext,
     },
 };
@@ -14,8 +15,8 @@ pub trait Numeral:
     + DecomposableInto<u8>
     + RecomposableFrom<u64>
     + RecomposableFrom<u8>
-    //+ ScalarMultiplier
-    //+ TwosComplementNegation
+    + ScalarMultiplier
+    + TwosComplementNegation
     + Copy
     + Sync
     + Send
@@ -35,8 +36,8 @@ impl<T> Numeral for T where
         + DecomposableInto<u8>
         + RecomposableFrom<u64>
         + RecomposableFrom<u8>
-        //+ ScalarMultiplier
-        //+ TwosComplementNegation
+        + ScalarMultiplier
+        + TwosComplementNegation
         + Copy
         + Sync
         + Send

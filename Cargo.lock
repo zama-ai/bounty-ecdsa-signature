@@ -450,7 +450,7 @@ dependencies = [
 [[package]]
 name = "tfhe"
 version = "0.3.0"
-source = "git+https://github.com/zama-ai/tfhe-rs#e2e901c220ba05ec4cada45bd7cdf950c494dc1c"
+source = "git+https://github.com/y-pakorn/tfhe-rs.git#42208b112548402822212b23373cbc22404b881b"
 dependencies = [
  "aligned-vec",
  "bincode",

@@ -9,7 +9,10 @@ use tfhe::integer::{
     IntegerCiphertext, RadixCiphertext, ServerKey,
 };
 
-use crate::helper::{bigint_ilog2_ceil, bigint_to_u128, from_bigint, to_bigint};
+use crate::{
+    helper::{bigint_ilog2_ceil, bigint_to_u128, from_bigint, to_bigint},
+    numeral::Numeral,
+};
 
 use super::modulo_fast;
 
@@ -37,7 +40,7 @@ pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
 #[inline(always)]
 /// Calculate n, c from p
 /// `c` must be in range 0 <= c <= 2^floor(n/2)
-pub fn mersenne_coeff_p<P: DecomposableInto<u8> + Copy + Sync>(p: P) -> (u32, BigInt) {
+pub fn mersenne_coeff_p<P: Numeral>(p: P) -> (u32, BigInt) {
     let pb = to_bigint(p);
     let n = bigint_ilog2_ceil(&pb);
     let c = (BigInt::from(1) << n) - &pb;
@@ -47,10 +50,7 @@ pub fn mersenne_coeff_p<P: DecomposableInto<u8> + Copy + Sync>(p: P) -> (u32, Bi
 
 /// Calculate x mod p^2 mod p
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
-pub fn mersenne_mod_native<P: DecomposableInto<u8> + RecomposableFrom<u8> + Copy + Sync>(
-    x: P,
-    p: P,
-) -> P {
+pub fn mersenne_mod_native<P: Numeral>(x: P, p: P) -> P {
     let (n, c) = mersenne_coeff_p(p);
     let x = to_bigint(x);
     let p = to_bigint(p);
@@ -72,10 +72,7 @@ pub fn mersenne_mod_native<P: DecomposableInto<u8> + RecomposableFrom<u8> + Copy
 }
 
 /// Calculate x mod p^2 mod p
-pub fn mod_mersenne<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mod_mersenne<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -140,10 +137,7 @@ pub fn mod_mersenne<
 }
 
 /// Calculate x mod 2p mod p
-pub fn mod_mersenne_fast<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mod_mersenne_fast<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
@@ -168,10 +162,7 @@ pub fn mod_mersenne_fast<
 }
 
 /// Calculate a * b mod p
-pub fn mul_mod_mersenne<
-    const NB: usize,
-    P: DecomposableInto<u64> + RecomposableFrom<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
@@ -249,7 +240,7 @@ mod tests {
 
     #[test]
     fn correct_mersenne_transfrom() {
-        let p = 127;
+        let p: u8 = 127;
         let coeff = mersenne_coeff_p(p);
         assert_eq!(coeff, (7, BigInt::from(1)));
     }

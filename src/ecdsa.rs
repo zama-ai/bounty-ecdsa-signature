@@ -8,6 +8,7 @@ use tfhe::integer::{
 
 use crate::{
     helper::{format, read_client_key},
+    numeral::Numeral,
     ops::{
         add_mod,
         group_jacobian::{
@@ -20,15 +21,7 @@ use crate::{
 
 /// perform ECDSA signing on message `P` % `r` over secret key `secret_key` % `r` and nonce `k` % `r`
 /// with prime subgroup generator `x, y` % `q`
-pub fn ecdsa_sign<
-    const NB: usize,
-    P: DecomposableInto<u64>
-        + RecomposableFrom<u64>
-        + RecomposableFrom<u8>
-        + DecomposableInto<u8>
-        + Copy
-        + Sync,
->(
+pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     sk: &RadixCiphertext,
     k: &RadixCiphertext,
     message: P,
@@ -88,15 +81,7 @@ pub fn ecdsa_sign<
     (r, s)
 }
 
-pub fn ecdsa_verify<
-    const NB: usize,
-    P: DecomposableInto<u64>
-        + RecomposableFrom<u64>
-        + RecomposableFrom<u8>
-        + DecomposableInto<u8>
-        + Copy
-        + Sync,
->(
+pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     public_key: (P, P),
     mut signature: (RadixCiphertext, RadixCiphertext),
     message: P,

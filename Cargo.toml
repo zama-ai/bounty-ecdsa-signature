@@ -21,3 +21,5 @@ go_big = []
 jacobian = []
 print_state = []
 
+[patch.'https://github.com/zama-ai/tfhe-rs']
+tfhe = { git = "https://github.com/y-pakorn/tfhe-rs.git" }
