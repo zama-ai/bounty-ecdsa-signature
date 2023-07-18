@@ -1,13 +1,14 @@
+use num_bigint::BigInt;
 use tfhe::{
     core_crypto::prelude::Numeric,
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
         server_key::{ScalarMultiplier, TwosComplementNegation},
-        ClientKey, RadixCiphertext,
+        ClientKey, RadixCiphertext, U256,
     },
 };
 
-use crate::helper::format;
+use crate::helper::{format, to_bigint};
 
 pub trait Numeral:
     Numeric
@@ -27,6 +28,10 @@ pub trait Numeral:
 
     fn decrypt(ciphertext: &RadixCiphertext, client_key: &ClientKey) -> Self {
         client_key.decrypt_radix::<Self>(ciphertext)
+    }
+
+    fn decrypt_bigint(ciphertext: &RadixCiphertext, client_key: &ClientKey) -> BigInt {
+        to_bigint(client_key.decrypt_radix::<U256>(ciphertext))
     }
 }
 

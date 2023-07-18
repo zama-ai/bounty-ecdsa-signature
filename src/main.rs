@@ -47,33 +47,33 @@ fn main() {
         (p, x1, y1, x2, y2)
     };
 
-    //#[cfg(not(feature = "go_big"))]
-    //const NUM_BLOCK: usize = 8;
-    //#[cfg(not(feature = "go_big"))]
-    //type Integer = u16;
-    //#[cfg(not(feature = "go_big"))]
-    //let (p, x1, y1, x2, y2) = {
-    //let p: Integer = 65535;
-    //let x1: Integer = 50725;
-    //let y1: Integer = 64006;
-    //let x2: Integer = 34884;
-    //let y2: Integer = 48022;
-    //(p, x1, y1, x2, y2)
-    //};
-
     #[cfg(not(feature = "go_big"))]
-    const NUM_BLOCK: usize = 4;
+    const NUM_BLOCK: usize = 8;
     #[cfg(not(feature = "go_big"))]
-    type Integer = u8;
+    type Integer = u16;
     #[cfg(not(feature = "go_big"))]
     let (p, x1, y1, x2, y2) = {
-        let p: Integer = 251;
-        let x1: Integer = 8;
-        let y1: Integer = 45;
-        let x2: Integer = 26;
-        let y2: Integer = 55;
+        let p: Integer = 65521;
+        let x1: Integer = 50725;
+        let y1: Integer = 64006;
+        let x2: Integer = 34884;
+        let y2: Integer = 48022;
         (p, x1, y1, x2, y2)
     };
+
+    //#[cfg(not(feature = "go_big"))]
+    //const NUM_BLOCK: usize = 4;
+    //#[cfg(not(feature = "go_big"))]
+    //type Integer = u8;
+    //#[cfg(not(feature = "go_big"))]
+    //let (p, x1, y1, x2, y2) = {
+    //let p: Integer = 251;
+    //let x1: Integer = 8;
+    //let y1: Integer = 45;
+    //let x2: Integer = 26;
+    //let y2: Integer = 55;
+    //(p, x1, y1, x2, y2)
+    //};
 
     let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
     let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
@@ -135,18 +135,18 @@ fn main() {
     //println!("should be {}", format(mul_mod_native(x1, y1, p)));
     //println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
 
-    //let now = Instant::now();
-    //let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
-    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
-    //println!(
-    //"{}^-1 % {} -> {}",
-    //format(x1),
-    //format(p),
-    //format(res_decoded)
-    //);
-    //let elasped = now.elapsed();
-    //println!("should be {}", format(inverse_mod_native(x1, p)));
-    //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
+    let now = Instant::now();
+    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
+    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    println!(
+        "{}^-1 % {} -> {}",
+        format(x1),
+        format(p),
+        format(res_decoded)
+    );
+    let elasped = now.elapsed();
+    println!("should be {}", format(inverse_mod_native(x1, p)));
+    println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
     // let now = Instant::now();
     // let res = pow_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
@@ -213,46 +213,46 @@ fn main() {
     //);
     //println!("group add in {} s", elasped.as_secs_f32());
 
-    let now = Instant::now();
-    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<3, NUM_BLOCK, _>(
-        x1,
-        y1,
-        &ct_x2,
-        p,
-        &server_key,
-    );
+    //let now = Instant::now();
+    //let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<4, NUM_BLOCK, _>(
+    //x1,
+    //y1,
+    //&ct_x2,
+    //p,
+    //&server_key,
+    //);
 
-    let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-    let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-    let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
-    let elasped = now.elapsed();
-    println!(
-        "{},{},{} * {} -> {},{},{}",
-        format(x1),
-        format(y1),
-        format(1),
-        format(x2),
-        format(x_dec),
-        format(y_dec),
-        format(z_dec)
-    );
-    println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
-    println!("Stats: {}", ProtocolStats::stats());
+    //let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+    //let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+    //let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+    //let elasped = now.elapsed();
+    //println!(
+    //"{},{},{} * {} -> {},{},{}",
+    //format(x1),
+    //format(y1),
+    //format(1),
+    //format(x2),
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec)
+    //);
+    //println!("group scalar mul in {:.2} s", elasped.as_secs_f32());
+    //println!("Stats: {}", ProtocolStats::stats());
 
-    let now = Instant::now();
-    let (x_aff, y_aff) =
-        group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
-    let elasped = now.elapsed();
-    println!(
-        "{},{},{} -> {},{}",
-        format(x_dec),
-        format(y_dec),
-        format(z_dec),
-        format(client_key.decrypt_radix::<Integer>(&x_aff)),
-        format(client_key.decrypt_radix::<Integer>(&y_aff))
-    );
-    println!(
-        "group projective into affine in {:.2}s",
-        elasped.as_secs_f32()
-    );
+    //let now = Instant::now();
+    //let (x_aff, y_aff) =
+    //group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
+    //let elasped = now.elapsed();
+    //println!(
+    //"{},{},{} -> {},{}",
+    //format(x_dec),
+    //format(y_dec),
+    //format(z_dec),
+    //format(client_key.decrypt_radix::<Integer>(&x_aff)),
+    //format(client_key.decrypt_radix::<Integer>(&y_aff))
+    //);
+    //println!(
+    //"group projective into affine in {:.2}s",
+    //elasped.as_secs_f32()
+    //);
 }

@@ -302,9 +302,11 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     for i in 0..loop_end {
         #[cfg(feature = "low_level_timing")]
         let bit_start = Instant::now();
+        println!("inverse_mod: bit {}", i);
 
         // q, r = r0 / r1
         let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+
         // rayon::join(
         //     || server_key.full_propagate_parallelized(&mut q),
         //     || server_key.full_propagate_parallelized(&mut r),
@@ -314,23 +316,30 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
 
         let tmp = t1.clone();
 
+        let mut qt1 = server_key.smart_mul_parallelized(&mut t1, &mut q);
         // t1 = t0 - q * t1
-        t1 = server_key.smart_sub_parallelized(
-            &mut t0.clone(),
-            &mut server_key.smart_mul_parallelized(&mut q.clone(), &mut t1.clone()),
-        );
+        t1 = server_key.smart_sub_parallelized(&mut t0, &mut qt1);
         t0 = tmp;
         // is_done = r =? 0
         // never_done = 1 - is_done
         // was_done = was_done | is_done
         // done_now = is_done & never_done
         let mut done = server_key.smart_scalar_eq_parallelized(&mut full_r.clone(), 0);
+        let len = done.blocks().len();
+        server_key.trim_radix_blocks_msb_assign(&mut done, len - 1);
         let mut never_done = server_key
             .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut was_done);
-        let mut done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
+        let done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
         server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
-        // inv = inv + done_now * t1
-        let mut update = server_key.smart_mul_parallelized(&mut done_now, &mut t0);
+
+        let len = done_now.blocks().len();
+        let mut not_done_now = server_key.smart_sub_parallelized(
+            &mut server_key.create_trivial_radix(0, padded_nb),
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&done_now, padded_nb - len),
+        );
+
+        let mut update = server_key.smart_bitand_parallelized(&mut t0, &mut not_done_now);
+        //let mut update = server_key.smart_mul_parallelized(&mut t0, &mut done_now);
         server_key.smart_add_assign_parallelized(&mut inv, &mut update);
 
         // update values
@@ -818,9 +827,13 @@ pub fn inverse_mod_pow<const NB: usize, P: Numeral>(
 mod tests {
     use std::time::Instant;
 
-    use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
+    use tfhe::{
+        integer::{keycache::IntegerKeyCache, U256},
+        shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
+    };
 
     use crate::{
+        numeral::Numeral,
         ops::{
             add_mod, double_mod, inverse_mod,
             mersenne::mod_mersenne,
@@ -1075,5 +1088,22 @@ mod tests {
             || mod_mersenne::<NUM_BLOCK, _>(&ct_x1, p, &server_key),
         );
         println!("parallel_mod_mersenne: {:.2}s", now.elapsed().as_secs_f32());
+    }
+
+    #[test]
+    fn correct_sub_wrap() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
+        const NUM_BLOCK: usize = 8;
+
+        let x1 = 1u8;
+        let mut ct_x1 = client_key.encrypt_radix(x1, 1);
+
+        let res = server_key.smart_sub_parallelized(
+            &mut server_key.create_trivial_radix(0, NUM_BLOCK + 1),
+            &mut ct_x1,
+        );
+
+        println!("res: {}", u8::decrypt_bigint(&res, &client_key));
     }
 }
