@@ -823,50 +823,70 @@ pub fn group_projective_scalar_mul_constant_windowed<
         );
         #[cfg(feature = "high_level_timing")]
         let now = Instant::now();
-        for (i, point) in points
-            .iter()
+        let mut points_to_add = vec![
+            (
+                server_key.create_trivial_radix(0, NB),
+                server_key.create_trivial_radix(0, NB)
+            );
+            2usize.pow(chunk_size as u32)
+        ];
+
+        points
+            .into_par_iter()
+            .enumerate()
+            .take(2usize.pow(chunk_size as u32))
+            .skip(1)
+            .map(|(i, point)| {
+                #[cfg(feature = "high_level_timing")]
+                let now = Instant::now();
+                let mut selected_bit = match i & 1 == 0 {
+                    true => not_bits[0].clone(),
+                    false => bits[0].clone(),
+                };
+                for j in 1..chunk_size {
+                    let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
+                        true => not_bits[j].clone(),
+                        false => bits[j].clone(),
+                    };
+                    server_key
+                        .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
+                }
+                let not_selected_bit = server_key.smart_sub_parallelized(
+                    &mut server_key.create_trivial_radix(P::ZERO, NB),
+                    &mut server_key
+                        .extend_radix_with_trivial_zero_blocks_msb(&selected_bit, NB - 1),
+                );
+                let res = rayon::join(
+                    || server_key.scalar_bitand_parallelized(&not_selected_bit, point.0),
+                    || server_key.scalar_bitand_parallelized(&not_selected_bit, point.1),
+                );
+                #[cfg(feature = "high_level_timing")]
+                if i % 100 == 1 {
+                    println!(
+                        "----Calculating selector option {i} done in {:.2}s",
+                        now.elapsed().as_secs_f32()
+                    );
+                }
+                res
+            })
+            .collect_into_vec(&mut points_to_add);
+
+        for (i, to_add) in points_to_add
+            .iter_mut()
             .enumerate()
             .take(2usize.pow(chunk_size as u32))
             .skip(1)
         {
             #[cfg(feature = "high_level_timing")]
             let now = Instant::now();
-            let mut selected_bit = match i & 1 == 0 {
-                true => not_bits[0].clone(),
-                false => bits[0].clone(),
-            };
-            for j in 1..chunk_size {
-                let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
-                    true => not_bits[j].clone(),
-                    false => bits[j].clone(),
-                };
-                server_key
-                    .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
-            }
             rayon::join(
-                || {
-                    server_key.smart_add_assign_parallelized(
-                        &mut selected_points.0,
-                        &mut server_key.smart_mul_parallelized(
-                            &mut server_key.create_trivial_radix(point.0, NB),
-                            &mut selected_bit.clone(),
-                        ),
-                    )
-                },
-                || {
-                    server_key.smart_add_assign_parallelized(
-                        &mut selected_points.1,
-                        &mut server_key.smart_mul_parallelized(
-                            &mut server_key.create_trivial_radix(point.1, NB),
-                            &mut selected_bit.clone(),
-                        ),
-                    )
-                },
+                || server_key.smart_add_assign_parallelized(&mut selected_points.0, &mut to_add.0),
+                || server_key.smart_add_assign_parallelized(&mut selected_points.1, &mut to_add.1),
             );
             #[cfg(feature = "high_level_timing")]
             if i % 100 == 1 {
                 println!(
-                    "----Calculating selector option {i} done in {:.2}s",
+                    "----Adding selector point {i} done in {:.2}s",
                     now.elapsed().as_secs_f32()
                 );
             }
