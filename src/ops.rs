@@ -32,11 +32,21 @@ pub fn selector_zero(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let mut res = a.clone();
+    let a_len = a.blocks().len();
     let len = selector.blocks().len();
-    let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
-    //let mut not_is_gt =
-    //server_key.smart_sub_parallelized(&mut server_key.create_trivial_radix(0, len), &mut is_gt);
-    server_key.smart_mul_assign_parallelized(&mut res, &mut selector);
+    #[cfg(not(feature = "inw_selector"))]
+    {
+        let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
+        server_key.smart_mul_assign_parallelized(&mut res, &mut selector);
+    }
+    #[cfg(feature = "inw_selector")]
+    {
+        let mut not_selector = server_key.smart_sub_parallelized(
+            &mut server_key.create_trivial_radix(0, a_len),
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, a_len - len),
+        );
+        server_key.smart_bitand_assign_parallelized(&mut res, &mut not_selector);
+    }
     res
 }
 
@@ -391,14 +401,15 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
         let done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
         server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
 
-        let len = done_now.blocks().len();
-        let mut not_done_now = server_key.smart_sub_parallelized(
-            &mut server_key.create_trivial_radix(0, padded_nb),
-            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&done_now, padded_nb - len),
-        );
+        //let len = done_now.blocks().len();
+        //let mut not_done_now = server_key.smart_sub_parallelized(
+        //&mut server_key.create_trivial_radix(0, padded_nb),
+        //&mut server_key.extend_radix_with_trivial_zero_blocks_msb(&done_now, padded_nb - len),
+        //);
 
-        let mut update = server_key.smart_bitand_parallelized(&mut t0, &mut not_done_now);
+        //let mut update = server_key.smart_bitand_parallelized(&mut t0, &mut not_done_now);
         //let mut update = server_key.smart_mul_parallelized(&mut t0, &mut done_now);
+        let mut update = selector_zero(&t0, &done_now, server_key);
         server_key.smart_add_assign_parallelized(&mut inv, &mut update);
 
         // update values
