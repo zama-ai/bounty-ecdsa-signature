@@ -987,6 +987,39 @@ pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
     res
 }
 
+pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
+    x: &RadixCiphertext,
+    y: &RadixCiphertext,
+    z_inv: &RadixCiphertext,
+    p: P,
+    server_key: &ServerKey,
+) -> (RadixCiphertext, RadixCiphertext) {
+    #[cfg(feature = "high_level_timing")]
+    let ops_start = Instant::now();
+    #[cfg(feature = "high_level_timing")]
+    let task_ref = rand::thread_rng().gen_range(0..1000);
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective into affine jacobian start -- ref {}",
+        task_ref
+    );
+
+    let z_inv2 = square_mod::<NB, _>(z_inv, p, server_key);
+    let z_inv3 = mul_mod::<NB, _>(&z_inv2, z_inv, p, server_key);
+
+    let res = rayon::join(
+        || mul_mod::<NB, _>(x, &z_inv2, p, server_key),
+        || mul_mod::<NB, _>(y, &z_inv3, p, server_key),
+    );
+    #[cfg(feature = "high_level_timing")]
+    println!(
+        "group projective into affine done in {:.2}s -- ref {}",
+        ops_start.elapsed().as_secs_f64(),
+        task_ref
+    );
+    res
+}
+
 pub fn group_projective_into_affine_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P) {
     let z_inv = inverse_mod_native(z, p);
     let z_inv2 = square_mod_native(z_inv, p);

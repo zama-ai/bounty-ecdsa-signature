@@ -13,9 +13,10 @@ use crate::{
         add_mod,
         group_jacobian::{
             group_projective_add_projective, group_projective_into_affine,
-            group_projective_scalar_mul_constant, group_projective_scalar_mul_constant_windowed,
+            group_projective_into_affine_inv, group_projective_scalar_mul_constant,
+            group_projective_scalar_mul_constant_windowed,
         },
-        inverse_mod, modulo_fast, mul_mod,
+        inverse_mod, inverse_mods, modulo_fast, mul_mod,
     },
 };
 
@@ -46,8 +47,11 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
         q_modulo,
         server_key,
     );
+    let inversed = inverse_mods::<NB, _>(&[&z_proj, k], q_modulo, server_key);
+    let z_inv = &inversed[0];
+    let k_inv = &inversed[1];
     let (x, y) =
-        group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
+        group_projective_into_affine_inv::<NB, _>(&x_proj, &y_proj, z_inv, q_modulo, server_key);
     read_client_key(|client_key| {
         println!("x = {}", P::decrypt(&x, client_key).format());
         println!("y = {}", P::decrypt(&y, client_key).format());
@@ -55,9 +59,8 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     // r = x
     // s = k^-1 * (m + r * sk)
     let r = modulo_fast::<NB, _>(&x, r_modulo, server_key);
-    let k_inv = inverse_mod::<NB, _>(k, r_modulo, server_key);
     read_client_key(|client_key| {
-        println!("k^-1 = {}", P::decrypt(&k_inv, client_key).format());
+        println!("k^-1 = {}", P::decrypt(k_inv, client_key).format());
     });
     let mrsk = add_mod::<NB, _>(
         &server_key.create_trivial_radix(message, NB),
@@ -65,7 +68,7 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
         r_modulo,
         server_key,
     );
-    let s = mul_mod::<NB, _>(&k_inv, &mrsk, r_modulo, server_key);
+    let s = mul_mod::<NB, _>(k_inv, &mrsk, r_modulo, server_key);
     read_client_key(|client_key| {
         println!("r = {}", P::decrypt(&r, client_key).format());
         println!("s = {}", P::decrypt(&s, client_key).format());

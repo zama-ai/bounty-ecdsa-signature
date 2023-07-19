@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use rand::Rng;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
     integer::{
@@ -339,6 +340,35 @@ pub fn inverse_mod<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     inverse_mod_trim::<NB, _>(a, p, server_key)
+}
+
+#[inline]
+pub fn inverse_mods<const NB: usize, P: Numeral>(
+    a: &[&RadixCiphertext],
+    p: P,
+    server_key: &ServerKey,
+) -> Vec<RadixCiphertext> {
+    let mut product = a[0].clone();
+    for elem in a.iter().skip(1) {
+        product = mul_mod::<NB, _>(&product, elem, p, server_key);
+    }
+    let inversed = inverse_mod::<NB, _>(&product, p, server_key);
+    let mut result = vec![server_key.create_trivial_radix(0, NB); a.len()];
+
+    (0..a.len())
+        .into_par_iter()
+        .map(|i| {
+            let mut res = inversed.clone();
+            for j in 0..a.len() {
+                if i != j {
+                    res = mul_mod::<NB, _>(&res, a[j], p, server_key);
+                }
+            }
+            res
+        })
+        .collect_into_vec(&mut result);
+
+    result
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
