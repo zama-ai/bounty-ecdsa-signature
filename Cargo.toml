@@ -20,6 +20,7 @@ high_level_timing = []
 go_big = []
 jacobian = []
 print_state = []
+inw_selector = []
 
 [patch.'https://github.com/zama-ai/tfhe-rs']
 tfhe = { git = "https://github.com/y-pakorn/tfhe-rs.git" }

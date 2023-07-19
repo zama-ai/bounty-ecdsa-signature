@@ -48,9 +48,23 @@ pub fn selector_zero_constant<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let len = selector.blocks().len();
-    let mut selector = server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, NB - len);
-    server_key.smart_scalar_mul_assign_parallelized(&mut selector, a);
-    selector
+    #[cfg(not(feature = "inw_selector"))]
+    let res = {
+        let mut selector =
+            server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, NB - len);
+        server_key.smart_scalar_mul_assign_parallelized(&mut selector, a);
+        selector
+    };
+    #[cfg(feature = "inw_selector")]
+    let res = {
+        let mut not_selector = server_key.smart_sub_parallelized(
+            &mut server_key.create_trivial_radix(0, NB),
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, NB - len),
+        );
+        server_key.smart_scalar_bitand_assign_parallelized(&mut not_selector, a);
+        not_selector
+    };
+    res
 }
 
 /// selector ? a : b
