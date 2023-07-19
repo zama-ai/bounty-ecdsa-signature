@@ -15,6 +15,7 @@ use crate::{
     numeral::Numeral,
     ops::{
         native::{add_mod_native, double_mod_native, mul_mod_native, sub_mod_native},
+        primitive::parallel_fn,
         selector_zero, selector_zero_constant,
     },
 };
@@ -820,10 +821,6 @@ pub fn group_projective_scalar_mul_constant_windowed<
         }
 
         // select the points
-        let mut selected_points = (
-            server_key.create_trivial_radix(0, NB),
-            server_key.create_trivial_radix(0, NB),
-        );
         #[cfg(feature = "high_level_timing")]
         let now = Instant::now();
         let mut points_to_add = vec![
@@ -831,7 +828,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
                 server_key.create_trivial_radix(0, NB),
                 server_key.create_trivial_radix(0, NB)
             );
-            2usize.pow(chunk_size as u32)
+            2usize.pow(chunk_size as u32) - 1
         ];
 
         points
@@ -869,26 +866,13 @@ pub fn group_projective_scalar_mul_constant_windowed<
             })
             .collect_into_vec(&mut points_to_add);
 
-        for (i, to_add) in points_to_add
-            .iter_mut()
-            .enumerate()
-            .take(2usize.pow(chunk_size as u32))
-            .skip(1)
-        {
-            #[cfg(feature = "high_level_timing")]
-            let now = Instant::now();
+        let selected_point = parallel_fn(&points_to_add, |p0, p1| {
             rayon::join(
-                || server_key.smart_add_assign_parallelized(&mut selected_points.0, &mut to_add.0),
-                || server_key.smart_add_assign_parallelized(&mut selected_points.1, &mut to_add.1),
-            );
-            #[cfg(feature = "high_level_timing")]
-            if i % 100 == 1 {
-                println!(
-                    "----Adding selector point {i} done in {:.2}s",
-                    now.elapsed().as_secs_f32()
-                );
-            }
-        }
+                || server_key.smart_add_parallelized(&mut p0.0.clone(), &mut p1.0.clone()),
+                || server_key.smart_add_parallelized(&mut p0.1.clone(), &mut p1.1.clone()),
+            )
+        });
+
         #[cfg(feature = "high_level_timing")]
         println!(
             "----Calculating selector done in {:.2}s",
@@ -909,8 +893,8 @@ pub fn group_projective_scalar_mul_constant_windowed<
             &res_x,
             &res_y,
             &res_z,
-            &selected_points.0,
-            &selected_points.1,
+            &selected_point.0,
+            &selected_point.1,
             &all_not_zero,
             p,
             server_key,
@@ -933,8 +917,8 @@ pub fn group_projective_scalar_mul_constant_windowed<
             );
             println!(
                 "Selected = {},{}",
-                format(client_key.decrypt_radix::<P>(&selected_points.0)),
-                format(client_key.decrypt_radix::<P>(&selected_points.1))
+                format(client_key.decrypt_radix::<P>(&selected_point.0)),
+                format(client_key.decrypt_radix::<P>(&selected_point.1))
             );
             println!(
                 "----Scalar mul bit {_ic:?} done in {:.2}s -- ref {}",

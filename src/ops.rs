@@ -17,12 +17,13 @@ use crate::{
     stats::{ProtocolLowOps, ProtocolStats},
 };
 
-use self::mersenne::mul_mod_mersenne;
+use self::{mersenne::mul_mod_mersenne, primitive::parallel_fn};
 
 pub mod group_homogenous;
 pub mod group_jacobian;
 pub mod mersenne;
 pub mod native;
+pub mod primitive;
 pub mod secp256k1;
 
 /// selector ? a : 0
@@ -33,7 +34,6 @@ pub fn selector_zero(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let mut res = a.clone();
-    let a_len = a.blocks().len();
     let len = selector.blocks().len();
     #[cfg(not(feature = "inw_selector"))]
     {
@@ -42,6 +42,7 @@ pub fn selector_zero(
     }
     #[cfg(feature = "inw_selector")]
     {
+        let a_len = a.blocks().len();
         let mut not_selector = server_key.smart_sub_parallelized(
             &mut server_key.create_trivial_radix(0, a_len),
             &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, a_len - len),
@@ -344,27 +345,26 @@ pub fn inverse_mod<const NB: usize, P: Numeral>(
 
 #[inline]
 pub fn inverse_mods<const NB: usize, P: Numeral>(
-    a: &[&RadixCiphertext],
+    a: &[RadixCiphertext],
     p: P,
     server_key: &ServerKey,
 ) -> Vec<RadixCiphertext> {
-    let mut product = a[0].clone();
-    for elem in a.iter().skip(1) {
-        product = mul_mod::<NB, _>(&product, elem, p, server_key);
-    }
+    let product = parallel_fn(a, |a, b| mul_mod::<NB, _>(a, b, p, server_key));
     let inversed = inverse_mod::<NB, _>(&product, p, server_key);
     let mut result = vec![server_key.create_trivial_radix(0, NB); a.len()];
 
     (0..a.len())
         .into_par_iter()
         .map(|i| {
-            let mut res = inversed.clone();
-            for j in 0..a.len() {
-                if i != j {
-                    res = mul_mod::<NB, _>(&res, a[j], p, server_key);
-                }
-            }
-            res
+            let mut coef = a
+                .iter()
+                .cloned()
+                .enumerate()
+                .filter(|(j, _)| i != *j)
+                .map(|e| e.1)
+                .collect::<Vec<_>>();
+            coef.push(inversed.clone());
+            parallel_fn(&coef, |a, b| mul_mod::<NB, _>(a, b, p, server_key))
         })
         .collect_into_vec(&mut result);
 

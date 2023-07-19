@@ -47,7 +47,7 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
         q_modulo,
         server_key,
     );
-    let inversed = inverse_mods::<NB, _>(&[&z_proj, k], q_modulo, server_key);
+    let inversed = inverse_mods::<NB, _>(&[z_proj, k.clone()], q_modulo, server_key);
     let z_inv = &inversed[0];
     let k_inv = &inversed[1];
     let (x, y) =

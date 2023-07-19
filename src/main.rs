@@ -2,12 +2,13 @@
 
 use fhe::{
     helper::{format, set_client_key, u256_from_decimal_string},
+    numeral::Numeral,
     ops::{
         add_mod, double_mod,
         group_jacobian::{
             group_projective_into_affine, group_projective_scalar_mul_constant_windowed,
         },
-        inverse_mod, mul_mod,
+        inverse_mod, inverse_mods, mul_mod,
         native::{add_mod_native, inverse_mod_native, mul_mod_native, sub_mod_native},
         sub_mod,
     },
@@ -135,17 +136,38 @@ fn main() {
     //println!("should be {}", format(mul_mod_native(x1, y1, p)));
     //println!("mul mod in {:.2} s\n", elasped.as_secs_f32());
 
+    //let now = Instant::now();
+    //let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
+    //let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    //println!(
+    //"{}^-1 % {} -> {}",
+    //format(x1),
+    //format(p),
+    //format(res_decoded)
+    //);
+    //let elasped = now.elapsed();
+    //println!("should be {}", format(inverse_mod_native(x1, p)));
+    //println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
+
     let now = Instant::now();
-    let res = inverse_mod::<NUM_BLOCK, _>(&ct_x1, p, &server_key);
-    let res_decoded = client_key.decrypt_radix::<Integer>(&res);
+    let res = inverse_mods::<NUM_BLOCK, _>(&[ct_x1.clone(), ct_y1.clone()], p, &server_key);
+    let res1_decoded = Integer::decrypt(&res[0], &client_key);
+    let res2_decoded = Integer::decrypt(&res[1], &client_key);
+    let elasped = now.elapsed();
     println!(
         "{}^-1 % {} -> {}",
         format(x1),
         format(p),
-        format(res_decoded)
+        format(res1_decoded)
     );
-    let elasped = now.elapsed();
     println!("should be {}", format(inverse_mod_native(x1, p)));
+    println!(
+        "{}^-1 % {} -> {}",
+        format(y1),
+        format(p),
+        format(res2_decoded)
+    );
+    println!("should be {}", format(inverse_mod_native(y1, p)));
     println!("inverse mod in {:.2} s\n", elasped.as_secs_f32());
 
     // let now = Instant::now();
