@@ -13,7 +13,10 @@ use tfhe::{
 use crate::{
     helper::{format, read_client_key},
     numeral::Numeral,
-    ops::native::{add_mod_native, double_mod_native, mul_mod_native, sub_mod_native},
+    ops::{
+        native::{add_mod_native, double_mod_native, mul_mod_native, sub_mod_native},
+        selector_zero, selector_zero_constant,
+    },
 };
 
 use super::{
@@ -851,14 +854,9 @@ pub fn group_projective_scalar_mul_constant_windowed<
                     server_key
                         .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
                 }
-                let not_selected_bit = server_key.smart_sub_parallelized(
-                    &mut server_key.create_trivial_radix(P::ZERO, NB),
-                    &mut server_key
-                        .extend_radix_with_trivial_zero_blocks_msb(&selected_bit, NB - 1),
-                );
                 let res = rayon::join(
-                    || server_key.scalar_bitand_parallelized(&not_selected_bit, point.0),
-                    || server_key.scalar_bitand_parallelized(&not_selected_bit, point.1),
+                    || selector_zero_constant::<NB, _>(point.0, &selected_bit, server_key),
+                    || selector_zero_constant::<NB, _>(point.1, &selected_bit, server_key),
                 );
                 #[cfg(feature = "high_level_timing")]
                 if i % 100 == 1 {

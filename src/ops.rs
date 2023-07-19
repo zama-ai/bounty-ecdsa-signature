@@ -24,6 +24,54 @@ pub mod mersenne;
 pub mod native;
 pub mod secp256k1;
 
+/// selector ? a : 0
+/// selector is a bit (0 or 1)
+pub fn selector_zero(
+    a: &RadixCiphertext,
+    selector: &RadixCiphertext,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let mut res = a.clone();
+    let len = selector.blocks().len();
+    let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
+    //let mut not_is_gt =
+    //server_key.smart_sub_parallelized(&mut server_key.create_trivial_radix(0, len), &mut is_gt);
+    server_key.smart_mul_assign_parallelized(&mut res, &mut selector);
+    res
+}
+
+/// selector ? a : 0
+/// selector is a bit (0 or 1)
+pub fn selector_zero_constant<const NB: usize, P: Numeral>(
+    a: P,
+    selector: &RadixCiphertext,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let len = selector.blocks().len();
+    let mut selector = server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, len - NB);
+    server_key.smart_scalar_mul_assign_parallelized(&mut selector, a);
+    selector
+}
+
+/// selector ? a : b
+/// selector is a bit (0 or 1)
+pub fn selector(
+    a: &RadixCiphertext,
+    b: &RadixCiphertext,
+    selector: &RadixCiphertext,
+    server_key: &ServerKey,
+) -> RadixCiphertext {
+    let len = selector.blocks().len();
+    let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
+    let mut not_selector = server_key
+        .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, len), &mut selector);
+    let (mut r0, mut r1) = rayon::join(
+        || server_key.smart_mul_parallelized(&mut a.clone(), &mut selector),
+        || server_key.smart_mul_parallelized(&mut b.clone(), &mut not_selector),
+    );
+    server_key.smart_add_parallelized(&mut r0, &mut r1)
+}
+
 /// a_0 + a_1 + ... + a_n mod p
 pub fn multi_add_mod<const NB: usize, P: Numeral>(
     a: &[RadixCiphertext],
@@ -83,14 +131,8 @@ pub fn modulo_fast<const NB: usize, P: Numeral>(
 ) -> RadixCiphertext {
     let len = x.blocks().len();
     let mut x = x.clone();
-    let mut is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
-    //server_key.trim_radix_blocks_msb_assign(&mut is_gt, len - 1);
-    //let to_sub =
-    //server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(b, NB), &mut is_gt);
-    //let to_sub = server_key.smart_scalar_mul_parallelized(&mut is_gt, b);
-    let mut not_is_gt =
-        server_key.smart_sub_parallelized(&mut server_key.create_trivial_radix(0, len), &mut is_gt);
-    let to_sub = server_key.scalar_bitand_parallelized(&mut not_is_gt, b);
+    let is_gt = server_key.smart_scalar_ge_parallelized(&mut x, b);
+    let to_sub = selector_zero_constant::<NB, _>(b, &is_gt, server_key);
     server_key.sub_assign_parallelized(&mut x, &to_sub);
     server_key.trim_radix_blocks_msb_assign(&mut x, len - NB);
     x
@@ -498,15 +540,8 @@ pub fn sub_mod<const NB: usize, P: Numeral>(
     #[cfg(feature = "low_level_timing")]
     println!("Sub mod start -- ref {}", task_ref);
 
-    let len = b.blocks().len();
-    let mut is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
-    //server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB - 1);
-    //let mut to_add =
-    //server_key.smart_mul_parallelized(&mut server_key.create_trivial_radix(p, NB), &mut is_gt);
-    //let mut to_add = server_key.smart_scalar_mul_parallelized(&mut is_gt, p);
-    let mut not_is_gt =
-        server_key.smart_sub_parallelized(&mut server_key.create_trivial_radix(0, len), &mut is_gt);
-    let mut to_add = server_key.smart_scalar_bitand_parallelized(&mut not_is_gt, p);
+    let is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
+    let mut to_add = selector_zero_constant::<NB, _>(p, &is_gt, server_key);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut to_add);
     server_key.sub_assign_parallelized(&mut a_expanded, b);
