@@ -6,6 +6,7 @@ use tfhe::{
     core_crypto::prelude::{Numeric, UnsignedInteger},
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
+        server_key::MiniUnsignedInteger,
         IntegerCiphertext, RadixCiphertext, ServerKey,
     },
 };
@@ -114,7 +115,7 @@ pub fn multi_add_mod<const NB: usize, P: Numeral>(
     // add all elements in a together
     let le = a.len();
     // find bit length of le
-    let log_le = le.ceil_ilog2() as usize;
+    let log_le = UnsignedInteger::ceil_ilog2(le) as usize;
     // find block length of le
     let extend = log_le / 2 + 1;
 
@@ -166,18 +167,30 @@ pub fn modulo_fast<const NB: usize, P: Numeral>(
 
 /// turn x mod a to x mod b
 /// for all cases, require 1 division
-pub fn modulo_div_rem<
-    const NB: usize,
-    P: DecomposableInto<u64> + DecomposableInto<u8> + Copy + Sync,
->(
+pub fn modulo_div_rem<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     b: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    let (_q, r) = server_key
-        .smart_div_rem_parallelized(&mut x.clone(), &mut server_key.create_trivial_radix(b, NB));
-    // server_key.full_propagate_parallelized(&mut r);
+    let (_q, r) = server_key.smart_div_rem_parallelized(
+        &mut x.clone(),
+        &mut server_key.create_trivial_radix(b, x.blocks().len()),
+    );
     r
+    //let mut x = x.clone();
+    //if !x.block_carries_are_empty() {
+    //server_key.full_propagate_parallelized(&mut x);
+    //}
+
+    //if MiniUnsignedInteger::is_power_of_two(b) {
+    //// unchecked_scalar_div would have panicked if divisor was zero
+    //server_key.scalar_bitand_parallelized(&x, b - P::ONE)
+    //} else {
+    //// remainder = numerator - (quotient * divisor)
+    //let quotient = server_key.unchecked_scalar_div_parallelized(&x, b);
+    //let tmp = server_key.unchecked_scalar_mul_parallelized(&quotient, b);
+    //server_key.sub_parallelized(&x, &tmp)
+    //}
 }
 
 pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
@@ -1202,5 +1215,31 @@ mod tests {
         );
 
         println!("res: {}", u8::decrypt_bigint(&res, &client_key));
+    }
+
+    #[test]
+    fn correct_scalar_div() {
+        // func reduce(a uint) uint {
+        // q := (a * m) >> k
+        // a -= q * n
+        // if a >= n {
+        //     a -= n
+        // }
+        // return a
+        // }
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
+        let mut x1 = 65432u128 * 65;
+        let p = 65521u128;
+        let res = (65432u128 * 65) % p;
+        let k = 32u32;
+        let m = 2u128.pow(k) / p;
+        let q = (x1 * m) >> k;
+        x1 -= q * p;
+        if x1 >= p {
+            x1 -= p;
+        }
+        println!("x1: {}", x1);
+        println!("res: {}", res);
     }
 }

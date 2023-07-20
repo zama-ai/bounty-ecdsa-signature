@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 use rand::Rng;
 use tfhe::integer::{
     block_decomposition::{DecomposableInto, RecomposableFrom},
-    IntegerCiphertext, RadixCiphertext, ServerKey,
+    IntegerCiphertext, RadixCiphertext, ServerKey, U512,
 };
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     numeral::Numeral,
 };
 
-use super::modulo_fast;
+use super::{modulo_div_rem, modulo_fast};
 
 /// Calculate n, m, p from coeff
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
@@ -78,6 +78,23 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let (n, c) = mersenne_coeff_p(p);
+    let ceilc = bigint_ilog2_ceil(&c);
+    if ceilc >= n / 2 {
+        let k = 4 * NB;
+        let m_bigint = BigInt::from(2).pow(k as u32) / to_bigint(p);
+        let block_to_add = (m_bigint.bits() - 2 * NB as u64 + 1) / 2;
+        let m = from_bigint::<U512>(&m_bigint);
+        let mut x =
+            server_key.extend_radix_with_trivial_zero_blocks_msb(x, NB + block_to_add as usize);
+        let mut q = server_key.smart_scalar_mul_parallelized(&mut x, m);
+        server_key.scalar_right_shift_assign_parallelized(&mut q, k as u64);
+        server_key
+            .sub_assign_parallelized(&mut x, &server_key.smart_scalar_mul_parallelized(&mut q, p));
+        let len = x.blocks().len();
+        server_key.trim_radix_blocks_msb_assign(&mut x, len - (NB + 1));
+
+        return modulo_fast::<NB, _>(&x, p, server_key);
+    }
     let c_blocks = (c.bits() as usize + 1) / 2;
     let x = server_key.extend_radix_with_trivial_zero_blocks_msb(x, (NB * 2) - x.blocks().len());
 
