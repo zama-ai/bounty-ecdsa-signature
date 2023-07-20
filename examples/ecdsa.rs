@@ -1,10 +1,14 @@
 use fhe::{
     ecdsa::ecdsa_sign,
     helper::{set_client_key, u256_from_decimal_string},
+    numeral::Numeral,
     ops::secp256k1::prelude::*,
     stats::ProtocolStats,
 };
-use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
+use tfhe::{
+    integer::{keycache::IntegerKeyCache, U256},
+    shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
+};
 
 fn main() {
     const NUM_BLOCK: usize = 128;
@@ -34,6 +38,10 @@ fn main() {
         &server_key,
     );
 
-    println!("signature: {:?}", signature);
+    println!(
+        "signature: r: {}, s: {}",
+        U256::decrypt(&signature.0, &client_key).format(),
+        U256::decrypt(&signature.1, &client_key).format()
+    );
     println!("stats: {}", ProtocolStats::stats());
 }
