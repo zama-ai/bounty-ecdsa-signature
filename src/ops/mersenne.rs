@@ -2,6 +2,7 @@
 
 use std::time::Instant;
 
+use logging_timer::time;
 use num_bigint::BigInt;
 use rand::Rng;
 use tfhe::integer::{
@@ -72,6 +73,7 @@ pub fn mersenne_mod_native<P: Numeral>(x: P, p: P) -> P {
 }
 
 /// Calculate x mod p^2 mod p
+#[time("trace", "Modulus Reduction Mersenne+Barrett")]
 pub fn mod_mersenne<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     p: P,
@@ -132,50 +134,7 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
         server_key.add_parallelized(&ca, &b)
     })(&x_mod_p);
 
-    // final pass % NB + 1 blocks
-    //let mut x_mod_p3 = (|x: &RadixCiphertext| {
-    //let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
-    //let mut b = server_key.smart_sub_parallelized(
-    //&mut x.clone(),
-    //&mut server_key.scalar_left_shift_parallelized(&a, n as u64),
-    //);
-    //let len = x.blocks().len();
-    //server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
-    //server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-    //let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-    //server_key.add_parallelized(&b, &ca)
-    //})(&x_mod_p2);
-
-    //let len = x_mod_p3.blocks().len();
-    //server_key.trim_radix_blocks_msb_assign(&mut x_mod_p3, len - NB);
-    //x_mod_p3
-
     modulo_fast::<NB, _>(&x_mod_p2, p, server_key)
-}
-
-/// Calculate x mod 2p mod p
-pub fn mod_mersenne_fast<const NB: usize, P: Numeral>(
-    x: &RadixCiphertext,
-    p: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    let (n, c) = mersenne_coeff_p(p);
-    let c_blocks = (c.bits() as usize + 1) / 2;
-    let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
-    let len = x.blocks().len();
-    let mut b = server_key.smart_sub_parallelized(
-        &mut x.clone(),
-        &mut server_key.scalar_left_shift_parallelized(&a, n as u64),
-    );
-    // a must be at least 2 + c_blocks (1 + c_bits bits) long
-    server_key.trim_radix_blocks_msb_assign(&mut a, len - (2 + c_blocks));
-    // b must be at least NB long
-    server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-    let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
-    let mut x_mod_p = server_key.add_parallelized(&b, &ca);
-    let len = x_mod_p.blocks().len();
-    server_key.trim_radix_blocks_msb_assign(&mut x_mod_p, len - NB);
-    x_mod_p
 }
 
 /// Calculate a * b mod p
@@ -185,24 +144,9 @@ pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("mul mod mersenne start -- ref {}", task_ref);
-
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
-    //server_key.full_propagate_parallelized(&mut a_expanded);
-    let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "mul mod mersenne done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
-    res
+    mod_mersenne::<NB, _>(&a_expanded, p, server_key)
 }
 
 #[cfg(test)]
@@ -213,7 +157,7 @@ mod tests {
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
     use crate::ops::{
-        mersenne::{mersenne_mod_native, mod_mersenne_fast, mul_mod_mersenne},
+        mersenne::{mersenne_mod_native, mul_mod_mersenne},
         native::mul_mod_native,
     };
 
@@ -260,24 +204,5 @@ mod tests {
         let p: u8 = 127;
         let coeff = mersenne_coeff_p(p);
         assert_eq!(coeff, (7, BigInt::from(1)));
-    }
-
-    #[test]
-    fn correct_mersenne_mod_fast() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-
-        const NUM_BLOCK: usize = 4;
-        let p: u128 = 251;
-        let x1: u128 = 249;
-        let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK + 1);
-        let now = Instant::now();
-        let added = server_key.add_parallelized(&ct_x1, &ct_x1);
-        let res = mod_mersenne_fast::<NUM_BLOCK, _>(&added, p, &server_key);
-        println!(
-            "mod mersenne fast done in {:.2}s",
-            now.elapsed().as_secs_f64()
-        );
-        let dec_res = client_key.decrypt_radix::<u128>(&res);
-        assert_eq!(dec_res, (x1 * 2) % p);
     }
 }

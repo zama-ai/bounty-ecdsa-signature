@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use logging_timer::{stimer, time, timer, Level};
 use rand::Rng;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use tfhe::{
@@ -23,7 +24,7 @@ use crate::{
 use super::{
     add_mod, double_mod, inverse_mod, mul_mod,
     native::{inverse_mod_native, square_mod_native},
-    square_mod, sub_mod,
+    selector, square_mod, sub_mod,
 };
 
 pub fn group_projective_double_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P, P) {
@@ -107,6 +108,7 @@ pub fn group_projective_add_affine_native<P: Numeral>(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[time("info", "Group Projective Add Mixed")]
 pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -117,14 +119,6 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-
-    #[cfg(feature = "high_level_timing")]
-    println!("group projective add affine start -- ref {}", task_ref);
-
     // z1z1 = z1^2
     let z1z1 = square_mod::<NB, _>(z, p, server_key);
     // u2 = x2*z1z1
@@ -263,16 +257,10 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
         || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
     );
 
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective add affine done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
-
     (x_prime, y_prime, z_prime)
 }
 
+#[time("info", "Group Projective Double")]
 pub fn group_projective_double<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -283,14 +271,6 @@ pub fn group_projective_double<const NB: usize, P: Numeral>(
     // case curve a = 0
     // a = x^2
     // b = y^2
-
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-
-    #[cfg(feature = "high_level_timing")]
-    println!("group projective double jacobian start -- ref {}", task_ref);
 
     let (a, b) = rayon::join(
         || square_mod::<NB, _>(x, p, server_key),
@@ -335,15 +315,10 @@ pub fn group_projective_double<const NB: usize, P: Numeral>(
         },
     );
     let y_prime = sub_mod::<NB, _>(&edx, &c8, p, server_key);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective double done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
     (x_prime, y_prime, z_prime)
 }
 
+#[time("info", "Group Projective Add")]
 #[allow(clippy::too_many_arguments)]
 pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
     x0: &RadixCiphertext,
@@ -355,13 +330,6 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!("group projective add jacobian start -- ref {}", task_ref);
-
     // z0z0 = z0^2
     // z1z1 = z1^2
     let (z0z0, z1z1) = rayon::join(
@@ -536,13 +504,6 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
         || server_key.smart_add_parallelized(&mut zp1, &mut zp2),
     );
 
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective add done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
-
     (x_prime, y_prime, z_prime)
 }
 
@@ -554,16 +515,6 @@ pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul jacobian start -- ref {}",
-        task_ref
-    );
-
     let mut tmp_x = x.clone();
     let mut tmp_y = y.clone();
     let mut tmp_z = z.clone();
@@ -573,9 +524,6 @@ pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
     for _i in 0..<P as Numeric>::BITS {
-        #[cfg(feature = "high_level_timing")]
-        let bit_start = Instant::now();
-
         let (mut bit, new_scalar) = rayon::join(
             || server_key.scalar_bitand_parallelized(&scalar, 1),
             || server_key.scalar_right_shift_parallelized(&scalar, 1),
@@ -605,35 +553,8 @@ pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
             },
             || group_projective_double::<NB, _>(&tmp_x, &tmp_y, &tmp_z, p, server_key),
         );
-        #[cfg(feature = "high_level_timing")]
-        read_client_key(|client_key| {
-            println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
-            println!(
-                "Res {},{},{}",
-                format(client_key.decrypt_radix::<P>(&res_x)),
-                format(client_key.decrypt_radix::<P>(&res_y)),
-                format(client_key.decrypt_radix::<P>(&res_z)),
-            );
-            println!(
-                "Tmp {},{},{}",
-                format(client_key.decrypt_radix::<P>(&tmp_x)),
-                format(client_key.decrypt_radix::<P>(&tmp_y)),
-                format(client_key.decrypt_radix::<P>(&tmp_z)),
-            );
-            println!(
-                "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
-                bit_start.elapsed().as_secs_f32(),
-                task_ref
-            );
-        });
     }
 
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
     (res_x, res_y, res_z)
 }
 
@@ -644,16 +565,6 @@ pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul jacobian start -- ref {}",
-        task_ref
-    );
-
     let mut tmp_x = x;
     let mut tmp_y = y;
     let mut scalar = scalar.clone();
@@ -662,9 +573,6 @@ pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
     let mut res_z = server_key.create_trivial_radix(0, NB);
 
     for _i in 0..<P as Numeric>::BITS {
-        #[cfg(feature = "high_level_timing")]
-        let bit_start = Instant::now();
-
         let (mut bit, new_scalar) = rayon::join(
             || server_key.scalar_bitand_parallelized(&scalar, 1),
             || server_key.scalar_right_shift_parallelized(&scalar, 1),
@@ -696,34 +604,12 @@ pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
                 group_projective_double_native(tmp_x, tmp_y, P::ONE, p);
             group_projective_into_affine_native(tmp_x_new, temp_y_new, temp_z_new, p)
         };
-
-        #[cfg(feature = "high_level_timing")]
-        read_client_key(|client_key| {
-            println!("Bit = {}", format(client_key.decrypt_radix::<P>(&bit)),);
-            println!(
-                "Res {},{},{}",
-                format(client_key.decrypt_radix::<P>(&res_x)),
-                format(client_key.decrypt_radix::<P>(&res_y)),
-                format(client_key.decrypt_radix::<P>(&res_z)),
-            );
-            println!("Tmp {},{}", format(tmp_x), format(tmp_y),);
-            println!(
-                "----Scalar mul bit {_i} done in {:.2}s -- ref {}",
-                bit_start.elapsed().as_secs_f32(),
-                task_ref
-            );
-        });
     }
 
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
     (res_x, res_y, res_z)
 }
 
+#[time("info", "Group Projective Scalar Mul Windowed")]
 pub fn group_projective_scalar_mul_constant_windowed<
     const W: usize,
     const NB: usize,
@@ -735,16 +621,6 @@ pub fn group_projective_scalar_mul_constant_windowed<
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul jacobian start -- ref {}",
-        task_ref
-    );
-
     let mut tmp_x = x;
     let mut tmp_y = y;
     let mut scalar = scalar.clone();
@@ -766,11 +642,8 @@ pub fn group_projective_scalar_mul_constant_windowed<
         let _ic = i..i + chunk_size;
         i += chunk_size;
 
-        #[cfg(feature = "high_level_timing")]
-        println!("----Start: Scalar mul bit {_ic:?}");
-        #[cfg(feature = "high_level_timing")]
-        let bit_start = Instant::now();
-
+        let _tmr = stimer!(Level::Info; "Scalar Mul", "Bits {:?}", _ic);
+        let cal_bits_tmr = timer!(Level::Debug; "Calculating bits");
         // get the next W bits
         let mut tmp_bits = vec![
             (
@@ -801,11 +674,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
             bits.push(bit);
         }
         server_key.scalar_right_shift_assign_parallelized(&mut scalar, chunk_size as u64);
-        #[cfg(feature = "high_level_timing")]
-        println!(
-            "----Calculating bits done in {:.2}s",
-            bit_start.elapsed().as_secs_f32()
-        );
+        drop(cal_bits_tmr);
 
         // get the precomputed values
         let mut points = vec![(P::ZERO, P::ZERO)];
@@ -821,8 +690,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
         }
 
         // select the points
-        #[cfg(feature = "high_level_timing")]
-        let now = Instant::now();
+        let sel_tmr = timer!(Level::Debug; "Selecting points", "Points {}", points.len() - 1);
         let mut points_to_add = vec![
             (
                 server_key.create_trivial_radix(0, NB),
@@ -830,15 +698,12 @@ pub fn group_projective_scalar_mul_constant_windowed<
             );
             2usize.pow(chunk_size as u32) - 1
         ];
-
         points
             .into_par_iter()
             .enumerate()
             .take(2usize.pow(chunk_size as u32))
             .skip(1)
             .map(|(i, point)| {
-                #[cfg(feature = "high_level_timing")]
-                let now = Instant::now();
                 let mut selected_bit = match i & 1 == 0 {
                     true => not_bits[0].clone(),
                     false => bits[0].clone(),
@@ -851,42 +716,26 @@ pub fn group_projective_scalar_mul_constant_windowed<
                     server_key
                         .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
                 }
-                let res = rayon::join(
+                rayon::join(
                     || selector_zero_constant::<NB, _>(point.0, &selected_bit, server_key),
                     || selector_zero_constant::<NB, _>(point.1, &selected_bit, server_key),
-                );
-                #[cfg(feature = "high_level_timing")]
-                if i % 100 == 1 {
-                    println!(
-                        "----Calculating selector option {i} done in {:.2}s",
-                        now.elapsed().as_secs_f32()
-                    );
-                }
-                res
+                )
             })
             .collect_into_vec(&mut points_to_add);
-
         let selected_point = parallel_fn(&points_to_add, |p0, p1| {
             rayon::join(
                 || server_key.smart_add_parallelized(&mut p0.0.clone(), &mut p1.0.clone()),
                 || server_key.smart_add_parallelized(&mut p0.1.clone(), &mut p1.1.clone()),
             )
         });
-
-        #[cfg(feature = "high_level_timing")]
-        println!(
-            "----Calculating selector done in {:.2}s",
-            now.elapsed().as_secs_f32()
-        );
+        drop(sel_tmr);
 
         // check if all bits are not zero for flag bit
-        let mut all_not_zero = bits[0].clone();
-        for bit in bits.iter_mut().take(chunk_size).skip(1) {
-            server_key.smart_bitor_assign_parallelized(&mut all_not_zero, bit);
-        }
-
-        let (_res_x_before, _res_y_before, _res_z_before) =
-            (res_x.clone(), res_y.clone(), res_z.clone());
+        let kary_or_tmr = timer!(Level::Debug; "Kary or");
+        let all_not_zero = parallel_fn(&bits, |b0, b1| {
+            server_key.smart_bitor_parallelized(&mut b0.clone(), &mut b1.clone())
+        });
+        drop(kary_or_tmr);
 
         // add the point
         (res_x, res_y, res_z) = group_projective_add_affine::<NB, _>(
@@ -899,44 +748,12 @@ pub fn group_projective_scalar_mul_constant_windowed<
             p,
             server_key,
         );
-
-        #[cfg(feature = "high_level_timing")]
-        read_client_key(|client_key| {
-            println!(
-                "Bits = {:?}",
-                bits.iter()
-                    .map(|bit| format(client_key.decrypt_radix::<P>(bit)))
-                    .collect::<Vec<_>>()
-            );
-
-            println!(
-                "Res {},{},{}",
-                format(client_key.decrypt_radix::<P>(&res_x)),
-                format(client_key.decrypt_radix::<P>(&res_y)),
-                format(client_key.decrypt_radix::<P>(&res_z)),
-            );
-            println!(
-                "Selected = {},{}",
-                format(client_key.decrypt_radix::<P>(&selected_point.0)),
-                format(client_key.decrypt_radix::<P>(&selected_point.1))
-            );
-            println!(
-                "----Scalar mul bit {_ic:?} done in {:.2}s -- ref {}",
-                bit_start.elapsed().as_secs_f32(),
-                task_ref
-            );
-        });
     }
 
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective scalar mul done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
     (res_x, res_y, res_z)
 }
 
+#[time("info", "Group Projective Into Affine")]
 pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -944,33 +761,17 @@ pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective into affine jacobian start -- ref {}",
-        task_ref
-    );
-
     let z_inv = inverse_mod::<NB, _>(z, p, server_key);
     let z_inv2 = square_mod::<NB, _>(&z_inv, p, server_key);
     let z_inv3 = mul_mod::<NB, _>(&z_inv2, &z_inv, p, server_key);
 
-    let res = rayon::join(
+    rayon::join(
         || mul_mod::<NB, _>(x, &z_inv2, p, server_key),
         || mul_mod::<NB, _>(y, &z_inv3, p, server_key),
-    );
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective into affine done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
-    res
+    )
 }
 
+#[time("info", "Group Projective Into Affine Inversed")]
 pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -978,30 +779,13 @@ pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective into affine jacobian start -- ref {}",
-        task_ref
-    );
-
     let z_inv2 = square_mod::<NB, _>(z_inv, p, server_key);
     let z_inv3 = mul_mod::<NB, _>(&z_inv2, z_inv, p, server_key);
 
-    let res = rayon::join(
+    rayon::join(
         || mul_mod::<NB, _>(x, &z_inv2, p, server_key),
         || mul_mod::<NB, _>(y, &z_inv3, p, server_key),
-    );
-    #[cfg(feature = "high_level_timing")]
-    println!(
-        "group projective into affine done in {:.2}s -- ref {}",
-        ops_start.elapsed().as_secs_f64(),
-        task_ref
-    );
-    res
+    )
 }
 
 pub fn group_projective_into_affine_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P) {

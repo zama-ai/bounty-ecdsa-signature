@@ -12,14 +12,13 @@ rand = "0.8.5"
 rayon = "1.7.0"
 tfhe = { git = "https://github.com/zama-ai/tfhe-rs", features = [ "boolean", "shortint", "integer", "internal-keycache"] }
 lazy_static = "1.4.0"
+logging_timer = "1.1.0"
+env_logger = "0.10.0"
+ctor = "0.2.4"
 
 [features]
 default = []
-low_level_timing = ["high_level_timing"]
-high_level_timing = []
 go_big = []
-jacobian = []
-print_state = []
 inw_selector = []
 
 [patch.'https://github.com/zama-ai/tfhe-rs']

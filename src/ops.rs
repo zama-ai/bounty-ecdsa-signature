@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use logging_timer::{stime, time, timer, Level};
 use rand::Rng;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use tfhe::{
@@ -14,7 +15,7 @@ use tfhe::{
 use crate::{
     helper::{format, read_client_key},
     numeral::Numeral,
-    ops::mersenne::{mod_mersenne, mod_mersenne_fast},
+    ops::mersenne::mod_mersenne,
     stats::{ProtocolLowOps, ProtocolStats},
 };
 
@@ -46,7 +47,7 @@ pub fn selector_zero(
         let a_len = a.blocks().len();
         let mut not_selector = server_key.smart_sub_parallelized(
             &mut server_key.create_trivial_radix(0, a_len),
-            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, a_len - len),
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(selector, a_len - len),
         );
         server_key.smart_bitand_assign_parallelized(&mut res, &mut not_selector);
     }
@@ -72,7 +73,7 @@ pub fn selector_zero_constant<const NB: usize, P: Numeral>(
     let res = {
         let mut not_selector = server_key.smart_sub_parallelized(
             &mut server_key.create_trivial_radix(0, NB),
-            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, NB - len),
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(selector, NB - len),
         );
         server_key.smart_scalar_bitand_assign_parallelized(&mut not_selector, a);
         not_selector
@@ -86,12 +87,13 @@ pub fn selector(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     selector: &RadixCiphertext,
+    not_selector: &RadixCiphertext,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    let len = selector.blocks().len();
-    let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
-    let mut not_selector = server_key
-        .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, len), &mut selector);
+    let selector_len = selector.blocks().len();
+    let not_selector_len = not_selector.blocks().len();
+    let mut selector = server_key.trim_radix_blocks_msb(selector, selector_len - 1);
+    let mut not_selector = server_key.trim_radix_blocks_msb(not_selector, not_selector_len - 1);
     let (mut r0, mut r1) = rayon::join(
         || server_key.smart_mul_parallelized(&mut a.clone(), &mut selector),
         || server_key.smart_mul_parallelized(&mut b.clone(), &mut not_selector),
@@ -106,12 +108,6 @@ pub fn multi_add_mod<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-
     // add all elements in a together
     let le = a.len();
     // find bit length of le
@@ -139,18 +135,12 @@ pub fn multi_add_mod<const NB: usize, P: Numeral>(
     }
 
     // server_key.full_propagate_parallelized(&mut sum);
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "multi add mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
-
     sum
 }
 
 /// turn x mod a to x mod b
 /// only if a > b and a < 2b
+#[time("trace", "Modulus Reduction")]
 pub fn modulo_fast<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     b: P,
@@ -177,20 +167,6 @@ pub fn modulo_div_rem<const NB: usize, P: Numeral>(
         &mut server_key.create_trivial_radix(b, x.blocks().len()),
     );
     r
-    //let mut x = x.clone();
-    //if !x.block_carries_are_empty() {
-    //server_key.full_propagate_parallelized(&mut x);
-    //}
-
-    //if MiniUnsignedInteger::is_power_of_two(b) {
-    //// unchecked_scalar_div would have panicked if divisor was zero
-    //server_key.scalar_bitand_parallelized(&x, b - P::ONE)
-    //} else {
-    //// remainder = numerator - (quotient * divisor)
-    //let quotient = server_key.unchecked_scalar_div_parallelized(&x, b);
-    //let tmp = server_key.unchecked_scalar_mul_parallelized(&quotient, b);
-    //server_key.sub_parallelized(&x, &tmp)
-    //}
 }
 
 pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
@@ -348,6 +324,7 @@ pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
 #[inline]
+#[time("debug", "Inverse Mod")]
 pub fn inverse_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
@@ -390,13 +367,6 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("inverse_mod: start -- ref {}", task_ref);
-
     let padded_nb = NB + 1;
     // implement extended euclidean algorithm with trim bit
     // assume a < p. (no check)
@@ -412,10 +382,7 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     // NB/2 best case and NB worst case
     let loop_end = <P as Numeric>::BITS + 1;
     for i in 0..loop_end {
-        #[cfg(feature = "low_level_timing")]
-        let bit_start = Instant::now();
-        println!("inverse_mod: bit {}", i);
-
+        let _tmr = (i % 10 == 0).then_some(|| timer!(Level::Trace; "Inverse Mod", "Bit {}", i));
         // q, r = r0 / r1
         let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
 
@@ -464,17 +431,6 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
             r0 = r1.clone();
             r1 = r.clone();
         }
-
-        #[cfg(feature = "low_level_timing")]
-        {
-            if (i == 0) | (i == loop_end - 1) {
-                println!(
-                    "----Inverse mod bit {i} done in {:.2}s -- ref {}",
-                    bit_start.elapsed().as_secs_f64(),
-                    task_ref
-                );
-            }
-        }
     }
 
     // final result mod p
@@ -491,13 +447,6 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     );
     server_key.smart_sub_assign_parallelized(&mut inv, &mut to_sub);
     server_key.full_propagate_parallelized(&mut inv);
-
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Inverse mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
 
     inv
 }
@@ -566,6 +515,7 @@ pub fn inverse_mod_without_trim<const NB: usize, P: Numeral>(
 }
 
 /// a + b mod p
+#[time("debug", "Add Mod")]
 pub fn add_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
@@ -574,28 +524,18 @@ pub fn add_mod<const NB: usize, P: Numeral>(
 ) -> RadixCiphertext {
     // assume large p and a,b < p
     let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-
-    #[cfg(feature = "low_level_timing")]
-    println!("Add mod start -- ref {}", task_ref);
 
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.smart_add_assign_parallelized(&mut a_expanded, &mut b.clone());
     let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
 
     ProtocolStats::add_time(ProtocolLowOps::AddMod, start_ops.elapsed().as_secs_f32());
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Add mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
 
     res
 }
 
 /// a - b mod p
+#[time("debug", "Sub Mod")]
 pub fn sub_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
@@ -603,10 +543,6 @@ pub fn sub_mod<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Sub mod start -- ref {}", task_ref);
 
     let is_gt = server_key.smart_gt_parallelized(&mut b.clone(), &mut a.clone());
     let mut to_add = selector_zero_constant::<NB, _>(p, &is_gt, server_key);
@@ -617,12 +553,6 @@ pub fn sub_mod<const NB: usize, P: Numeral>(
     server_key.trim_radix_blocks_msb_assign(&mut a_expanded, 1);
 
     ProtocolStats::add_time(ProtocolLowOps::SubMod, start_ops.elapsed().as_secs_f32());
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Sub mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
     a_expanded
 }
 
@@ -634,14 +564,6 @@ pub fn mul_mod_bitwise<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-
-    #[cfg(feature = "low_level_timing")]
-    println!("Mul mod bitwise start -- ref {}", task_ref);
-
     let mut res = server_key.create_trivial_radix(0u64, NB);
     let mut a_tmp = a.clone();
     let b_tmp = b.clone();
@@ -655,9 +577,6 @@ pub fn mul_mod_bitwise<const NB: usize, P: Numeral>(
 
     let loop_end = <P as Numeric>::BITS;
     for _i in 0..loop_end {
-        #[cfg(feature = "low_level_timing")]
-        let bit_start = Instant::now();
-
         ((b_next_tmp, a_tmp), (bit, (res, to_add_later))) = rayon::join(
             || {
                 rayon::join(
@@ -682,28 +601,9 @@ pub fn mul_mod_bitwise<const NB: usize, P: Numeral>(
                 )
             },
         );
-        #[cfg(feature = "low_level_timing")]
-        {
-            if (_i == 0) | (_i == loop_end - 1) {
-                println!(
-                    "----Mul mod bitwise {_i} done in {:.2}s -- ref {}",
-                    bit_start.elapsed().as_secs_f64(),
-                    task_ref
-                );
-            }
-        }
     }
 
-    let result = add_mod::<NB, _>(&res, &to_add_later, p, server_key);
-
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Mul mod bitwise done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
-
-    result
+    add_mod::<NB, _>(&res, &to_add_later, p, server_key)
 }
 
 /// a * b mod p
@@ -714,13 +614,6 @@ pub fn mul_mod_div_rem<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Mul mod div rem start -- ref {}", task_ref);
-
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
     // server_key.full_propagate_parallelized(&mut a_expanded);
@@ -730,16 +623,11 @@ pub fn mul_mod_div_rem<const NB: usize, P: Numeral>(
     );
     // server_key.full_propagate_parallelized(&mut r);
     server_key.trim_radix_blocks_msb_assign(&mut r, NB);
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Mul mod div rem done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
     r
 }
 
 /// a * b mod p
+#[time("debug", "Mul Mod")]
 pub fn mul_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
@@ -761,27 +649,15 @@ pub fn mul_mod_constant<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Mul mod constant start -- ref {}", task_ref);
-
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
     server_key.smart_scalar_mul_assign_parallelized(&mut a_expanded, b);
-    let res = mod_mersenne::<NB, _>(&a_expanded, p, server_key);
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Mul mod constant done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
-    res
+
+    mod_mersenne::<NB, _>(&a_expanded, p, server_key)
 }
 
 /// a^2 mod p
 #[inline(always)]
+#[time("debug", "Square mod")]
 pub fn square_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
@@ -795,52 +671,34 @@ pub fn square_mod<const NB: usize, P: Numeral>(
 
 /// a*2 mod p
 #[inline(always)]
+#[time("debug", "Double mod")]
 pub fn double_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Double mod start -- ref {}", task_ref);
-
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.scalar_left_shift_assign_parallelized(&mut a_expanded, 1);
     let res = modulo_fast::<NB, _>(&a_expanded, p, server_key);
-
     ProtocolStats::add_time(ProtocolLowOps::DoubleMod, start_ops.elapsed().as_secs_f32());
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Double mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
     res
 }
 
 /// a^b mod p
+#[time("debug", "Pow mod")]
 pub fn pow_mod<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Pow mod start -- ref {}", task_ref);
-
     let mut res = server_key.create_trivial_radix(1, NB);
     let mut base = a.clone();
     let mut exponent = b.clone();
     let loop_end = <P as Numeric>::BITS;
     for _i in 0..loop_end {
-        #[cfg(feature = "low_level_timing")]
-        let bit_start = Instant::now();
+        let _tmr = timer!(Level::Trace; "Pow Mod", "Bit {}", _i);
 
         (res, (exponent, base)) = rayon::join(
             || {
@@ -864,23 +722,7 @@ pub fn pow_mod<const NB: usize, P: Numeral>(
                 )
             },
         );
-        #[cfg(feature = "low_level_timing")]
-        {
-            if (_i == 0) | (_i == loop_end - 1) {
-                println!(
-                    "----pow mod bit {_i} done in {:.2}s -- ref {}",
-                    bit_start.elapsed().as_secs_f32(),
-                    task_ref,
-                );
-            }
-        }
     }
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Pow mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
     res
 }
 
@@ -889,20 +731,11 @@ pub fn inverse_mod_pow<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "low_level_timing")]
-    let start_ops = Instant::now();
-    #[cfg(feature = "low_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "low_level_timing")]
-    println!("Inverse mod start -- ref {}", task_ref);
-
     let mut res = server_key.create_trivial_radix(1, NB);
     let mut base = a.clone();
     let mut exponent = p - P::cast_from(2u64);
     let loop_end = <P as Numeric>::BITS;
     for _i in 0..loop_end {
-        #[cfg(feature = "low_level_timing")]
-        let bit_start = Instant::now();
         let b = base.clone();
         rayon::join(
             || {
@@ -913,23 +746,7 @@ pub fn inverse_mod_pow<const NB: usize, P: Numeral>(
             },
             || base = square_mod::<NB, _>(&base, p, server_key),
         );
-        #[cfg(feature = "low_level_timing")]
-        {
-            if (_i == 0) | (_i == loop_end - 1) {
-                println!(
-                    "----inverse mod bit {_i} done in {:.2}s -- ref {}",
-                    bit_start.elapsed().as_secs_f32(),
-                    task_ref,
-                );
-            }
-        }
     }
-    #[cfg(feature = "low_level_timing")]
-    println!(
-        "Inverse mod done in {:.2}s -- ref {}",
-        start_ops.elapsed().as_secs_f64(),
-        task_ref
-    );
     res
 }
 
@@ -1215,31 +1032,5 @@ mod tests {
         );
 
         println!("res: {}", u8::decrypt_bigint(&res, &client_key));
-    }
-
-    #[test]
-    fn correct_scalar_div() {
-        // func reduce(a uint) uint {
-        // q := (a * m) >> k
-        // a -= q * n
-        // if a >= n {
-        //     a -= n
-        // }
-        // return a
-        // }
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-
-        let mut x1 = 65432u128 * 65;
-        let p = 65521u128;
-        let res = (65432u128 * 65) % p;
-        let k = 32u32;
-        let m = 2u128.pow(k) / p;
-        let q = (x1 * m) >> k;
-        x1 -= q * p;
-        if x1 >= p {
-            x1 -= p;
-        }
-        println!("x1: {}", x1);
-        println!("res: {}", res);
     }
 }
