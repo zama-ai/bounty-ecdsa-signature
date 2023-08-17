@@ -704,18 +704,27 @@ pub fn group_projective_scalar_mul_constant_windowed<
             .take(2usize.pow(chunk_size as u32))
             .skip(1)
             .map(|(i, point)| {
-                let mut selected_bit = match i & 1 == 0 {
-                    true => not_bits[0].clone(),
-                    false => bits[0].clone(),
-                };
-                for j in 1..chunk_size {
-                    let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
+                let bits = (0..chunk_size)
+                    .map(|j| match i & 2usize.pow(j as u32) == 0 {
                         true => not_bits[j].clone(),
                         false => bits[j].clone(),
-                    };
-                    server_key
-                        .smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
-                }
+                    })
+                    .collect::<Vec<_>>();
+                let selected_bit = parallel_fn(&bits, |b0, b1| {
+                    server_key.smart_bitand_parallelized(&mut b0.clone(), &mut b1.clone())
+                });
+                //let mut selected_bit = match i & 1 == 0 {
+                //true => not_bits[0].clone(),
+                //false => bits[0].clone(),
+                //};
+                //for j in 1..chunk_size {
+                //let mut selected_bit_and = match i & 2usize.pow(j as u32) == 0 {
+                //true => not_bits[j].clone(),
+                //false => bits[j].clone(),
+                //};
+                //server_key
+                //.smart_bitand_assign_parallelized(&mut selected_bit, &mut selected_bit_and);
+                //}
                 rayon::join(
                     || selector_zero_constant::<NB, _>(point.0, &selected_bit, server_key),
                     || selector_zero_constant::<NB, _>(point.1, &selected_bit, server_key),
