@@ -14,6 +14,7 @@ use fhe::{
         sub_mod,
     },
     stats::ProtocolStats,
+    WINDOW,
 };
 use logging_timer::Level;
 use std::time::Instant;
@@ -225,7 +226,7 @@ fn main() {
     println!("group add in {} s", elasped.as_secs_f32());
 
     let now = Instant::now();
-    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<8, NUM_BLOCK, _>(
+    let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<WINDOW, NUM_BLOCK, _>(
         x1,
         y1,
         &ct_x2,

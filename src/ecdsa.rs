@@ -18,6 +18,7 @@ use crate::{
         },
         inverse_mod, inverse_mods, modulo_fast, mul_mod,
     },
+    WINDOW,
 };
 
 /// perform ECDSA signing on message `P` % `r` over secret key `secret_key` % `r` and nonce `k` % `r`
@@ -35,7 +36,7 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     println!("ECDSA sign start");
     println!("Calculating (x, y) = k * G");
     let ops_start = Instant::now();
-    let (x_proj, y_proj, z_proj) = group_projective_scalar_mul_constant_windowed::<8, NB, _>(
+    let (x_proj, y_proj, z_proj) = group_projective_scalar_mul_constant_windowed::<WINDOW, NB, _>(
         generator.0,
         generator.1,
         k,
@@ -100,19 +101,17 @@ pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     // u2 = r * s^-1
     let u2 = mul_mod::<NB, _>(&s_inv, &signature.0, r_modulo, server_key);
     // (x, y) = u1 * G + u2 * Q
-    let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul_constant_windowed::<8, NB, _>(
-        generator.0,
-        generator.1,
-        &u1,
-        q_modulo,
-        server_key,
-    );
-    let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul_constant_windowed::<8, NB, _>(
-        public_key.0,
-        public_key.1,
-        &u2,
-        q_modulo,
-        server_key,
+    let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul_constant_windowed::<
+        WINDOW,
+        NB,
+        _,
+    >(generator.0, generator.1, &u1, q_modulo, server_key);
+    let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul_constant_windowed::<
+        WINDOW,
+        NB,
+        _,
+    >(
+        public_key.0, public_key.1, &u2, q_modulo, server_key
     );
     let (x_proj, y_proj, mut z_proj) = group_projective_add_projective::<NB, _>(
         &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, q_modulo, server_key,

@@ -20,6 +20,8 @@ lazy_static! {
     pub static ref CLIENT_KEY: RwLock<Option<ClientKey>> = RwLock::new(None);
 }
 
+pub const WINDOW: usize = 6;
+
 #[ctor]
 fn init() {
     env_logger::builder()
