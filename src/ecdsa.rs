@@ -32,14 +32,9 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> (RadixCiphertext, RadixCiphertext) {
     // (x, y) = k * G
-    #[cfg(feature = "high_level_timing")]
-    let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!("ecdsa sign start -- ref {}", task_ref);
-
+    println!("ECDSA sign start");
     println!("Calculating (x, y) = k * G");
+    let ops_start = Instant::now();
     let (x_proj, y_proj, z_proj) = group_projective_scalar_mul_constant_windowed::<8, NB, _>(
         generator.0,
         generator.1,
@@ -74,11 +69,9 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
         println!("s = {}", P::decrypt(&s, client_key).format());
     });
 
-    #[cfg(feature = "high_level_timing")]
     println!(
-        "ecdsa sign end, done in {:.2}s -- ref {}",
+        "ECDSA sign end, done in {:.2}s",
         ops_start.elapsed().as_secs_f64(),
-        task_ref
     );
 
     (r, s)
@@ -93,12 +86,8 @@ pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     r_modulo: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "high_level_timing")]
+    println!("ECDSA verify start");
     let ops_start = Instant::now();
-    #[cfg(feature = "high_level_timing")]
-    let task_ref = rand::thread_rng().gen_range(0..1000);
-    #[cfg(feature = "high_level_timing")]
-    println!("ecdsa verify start -- ref {}", task_ref);
     // s^-1
     let s_inv = inverse_mod::<NB, _>(&signature.1, r_modulo, server_key);
     // u1 = m * s^-1
@@ -134,11 +123,9 @@ pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     let mut x_mod_scalar = modulo_fast::<NB, _>(&x, r_modulo, server_key);
     let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x_mod_scalar, &mut signature.0);
 
-    #[cfg(feature = "high_level_timing")]
     println!(
-        "ecdsa verify done in {:.2}s -- ref {}",
+        "ecdsa verify done in {:.2}s",
         ops_start.elapsed().as_secs_f64(),
-        task_ref
     );
     // valid if z != 0 && x == r
     server_key.smart_bitand_parallelized(&mut is_z_zero, &mut is_x_eq_r)
