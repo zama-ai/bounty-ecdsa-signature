@@ -65,6 +65,9 @@ pub fn group_projective_add_affine_native<P: Numeral>(
     other_y: P,
     p: P,
 ) -> (P, P, P) {
+    if z == P::ZERO {
+        return (other_x, other_y, P::ONE);
+    }
     // z1z1 = z1^2
     let z1z1 = square_mod_native(z, p);
     // u2 = x2*z1z1
@@ -604,6 +607,35 @@ pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
                 group_projective_double_native(tmp_x, tmp_y, P::ONE, p);
             group_projective_into_affine_native(tmp_x_new, temp_y_new, temp_z_new, p)
         };
+    }
+
+    (res_x, res_y, res_z)
+}
+
+pub fn group_projective_scalar_mul_native<P: Numeral>(
+    x: P,
+    y: P,
+    mut scalar: P,
+    p: P,
+) -> (P, P, P) {
+    let mut tmp_x = x;
+    let mut tmp_y = y;
+    let mut res_x = P::ZERO;
+    let mut res_y = P::ZERO;
+    let mut res_z = P::ZERO;
+
+    for _i in 0..P::BITS {
+        let bit = scalar.bitand(P::ONE);
+        scalar >>= 1;
+
+        if bit == P::ONE {
+            (res_x, res_y, res_z) =
+                group_projective_add_affine_native(res_x, res_y, res_z, tmp_x, tmp_y, p);
+        }
+
+        let (tmp_x_new, temp_y_new, temp_z_new) =
+            group_projective_double_native(tmp_x, tmp_y, P::ONE, p);
+        (tmp_x, tmp_y) = group_projective_into_affine_native(tmp_x_new, temp_y_new, temp_z_new, p);
     }
 
     (res_x, res_y, res_z)

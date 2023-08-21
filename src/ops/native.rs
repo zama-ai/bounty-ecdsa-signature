@@ -12,6 +12,13 @@ pub fn inverse_mod_native<P: Numeral>(a: P, p: P) -> P {
     pow_mod_native(a, p - P::TWO, p)
 }
 
+#[inline]
+pub fn modulo_native<P: Numeral>(a: P, p: P) -> P {
+    let a_bigint = to_bigint(a);
+    let p_bigint = to_bigint(p);
+    from_bigint(&(&a_bigint % &p_bigint))
+}
+
 /// a^b mod p
 #[inline]
 pub fn pow_mod_native<P: Numeral>(a: P, b: P, p: P) -> P {
