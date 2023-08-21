@@ -384,8 +384,13 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     for i in 0..loop_end {
         let _tmr = (i % 10 == 0).then_some(|| timer!(Level::Trace; "Inverse Mod", "Bit {}", i));
         // q, r = r0 / r1
-        let (mut q, mut r) =
-            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+
+        //read_client_key(|ck| {
+        //println!("q: {}", P::decrypt(&q, &ck).format());
+        //println!("r: {}", P::decrypt(&r, &ck).format());
+        //println!("blocks r: {}, q: {}", r.blocks().len(), q.blocks().len());
+        //});
 
         //rayon::join(
         //|| server_key.full_propagate_parallelized(&mut q),
@@ -761,9 +766,10 @@ mod tests {
     };
 
     use crate::{
+        helper::set_client_key,
         numeral::Numeral,
         ops::{
-            add_mod, double_mod, inverse_mod,
+            add_mod, double_mod, inverse_mod, inverse_mods,
             mersenne::mod_mersenne,
             mul_mod, mul_mod_constant, multi_add_mod,
             native::{inverse_mod_native, mul_mod_native, sub_mod_native},
@@ -943,49 +949,75 @@ mod tests {
     #[test]
     fn correct_inverse_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        set_client_key(&client_key);
         const NUM_BLOCK: usize = 4;
-        let p: u128 = 157;
-        let a: u128 = 8;
-        let b: u128 = 6;
-        let e: u128 = 45;
-        let f: u128 = 123;
-        let h: u128 = 127;
-        let i: u128 = 156;
+        let p: u8 = 157;
+        let a: u8 = 8;
+        let b: u8 = 6;
+        let e: u8 = 45;
+        let f: u8 = 123;
+        let h: u8 = 127;
+        let i: u8 = 156;
 
         let c = inverse_mod_native(a, p);
         let enc_c =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
-        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+        assert_eq!(c, client_key.decrypt_radix::<u8>(&enc_c));
 
         let d = inverse_mod_native(b, p);
         let enc_d =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
-        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+        assert_eq!(d, client_key.decrypt_radix::<u8>(&enc_d));
 
         let m = inverse_mod_native(e, p);
         let enc_m =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(e, NUM_BLOCK), p, &server_key);
-        assert_eq!(m as u8, client_key.decrypt_radix::<u8>(&enc_m));
+        assert_eq!(m, client_key.decrypt_radix::<u8>(&enc_m));
 
         let g = inverse_mod_native(f, p);
         let enc_g =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
-        assert_eq!(g as u8, client_key.decrypt_radix::<u8>(&enc_g));
+        assert_eq!(g, client_key.decrypt_radix::<u8>(&enc_g));
 
         let j = inverse_mod_native(h, p);
         let enc_j =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(h, NUM_BLOCK), p, &server_key);
-        assert_eq!(j as u8, client_key.decrypt_radix::<u8>(&enc_j));
+        assert_eq!(j, client_key.decrypt_radix::<u8>(&enc_j));
 
         let k = inverse_mod_native(i, p);
         let enc_k =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(i, NUM_BLOCK), p, &server_key);
-        assert_eq!(k as u8, client_key.decrypt_radix::<u8>(&enc_k));
+        assert_eq!(k, client_key.decrypt_radix::<u8>(&enc_k));
 
         let l = inverse_mod_native(f, p);
         let enc_l =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
-        assert_eq!(l as u8, client_key.decrypt_radix::<u8>(&enc_l));
+        assert_eq!(l, client_key.decrypt_radix::<u8>(&enc_l));
+    }
+
+    #[test]
+    fn correct_inverse_mods() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        set_client_key(&client_key);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 157;
+        let a: u8 = 8;
+        let b: u8 = 123;
+
+        let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
+        let enc_b = client_key.encrypt_radix(b, NUM_BLOCK);
+
+        let r_a = inverse_mod_native(a, p);
+        let r_b = inverse_mod_native(b, p);
+
+        let results = inverse_mods::<NUM_BLOCK, _>(&[enc_a, enc_b], p, &server_key);
+        assert_eq!(r_a, client_key.decrypt_radix::<u8>(&results[0]));
+        assert_eq!(r_b, client_key.decrypt_radix::<u8>(&results[1]));
+
+        let results =
+            inverse_mods::<NUM_BLOCK, _>(&[results[0].clone(), results[1].clone()], p, &server_key);
+        assert_eq!(a, client_key.decrypt_radix::<u8>(&results[0]));
+        assert_eq!(b, client_key.decrypt_radix::<u8>(&results[1]));
     }
 
     #[test]
