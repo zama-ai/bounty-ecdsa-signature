@@ -1,6 +1,6 @@
 use num_bigint::BigInt;
 use tfhe::{
-    core_crypto::prelude::Numeric,
+    core_crypto::prelude::{Numeric, UnsignedNumeric},
     integer::{
         block_decomposition::{DecomposableInto, RecomposableFrom},
         server_key::{MiniUnsignedInteger, Reciprocable, ScalarMultiplier, TwosComplementNegation},
@@ -12,6 +12,7 @@ use crate::helper::{format, to_bigint};
 
 pub trait Numeral:
     Numeric
+    + UnsignedNumeric
     + DecomposableInto<u64>
     + DecomposableInto<u8>
     + RecomposableFrom<u64>
@@ -39,6 +40,7 @@ pub trait Numeral:
 
 impl<T> Numeral for T where
     T: Numeric
+        + UnsignedNumeric
         + DecomposableInto<u64>
         + DecomposableInto<u8>
         + RecomposableFrom<u64>

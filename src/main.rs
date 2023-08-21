@@ -200,10 +200,10 @@ fn main() {
     let (x_new, y_new, z_new) = group_projective_add_affine::<NUM_BLOCK, _>(
         &ct_x1,
         &ct_y1,
-        &client_key.encrypt_radix(1, NUM_BLOCK),
+        &client_key.encrypt_radix(1u8, NUM_BLOCK),
         &ct_x2,
         &ct_y2,
-        &client_key.encrypt_radix(1, 1),
+        &client_key.encrypt_radix(1u8, 1),
         p,
         &server_key,
     );

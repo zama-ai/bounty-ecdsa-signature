@@ -371,11 +371,11 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     // implement extended euclidean algorithm with trim bit
     // assume a < p. (no check)
     let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
-    let mut r0 = server_key.create_trivial_radix(p, padded_nb);
+    let mut r0: RadixCiphertext = server_key.create_trivial_radix(p, padded_nb);
     let mut r1 = a;
     let mut was_done = server_key.create_trivial_radix(0, 1);
     let mut t0 = server_key.create_trivial_radix(0, padded_nb);
-    let mut t1 = server_key.create_trivial_radix(1, padded_nb);
+    let mut t1: RadixCiphertext = server_key.create_trivial_radix(1, padded_nb);
     let mut inv = server_key.create_trivial_radix(0, padded_nb);
     let mut trim = 0;
     // euclidean algorithm
@@ -384,12 +384,13 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     for i in 0..loop_end {
         let _tmr = (i % 10 == 0).then_some(|| timer!(Level::Trace; "Inverse Mod", "Bit {}", i));
         // q, r = r0 / r1
-        let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
+        let (mut q, mut r) =
+            server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
 
-        // rayon::join(
-        //     || server_key.full_propagate_parallelized(&mut q),
-        //     || server_key.full_propagate_parallelized(&mut r),
-        // );
+        //rayon::join(
+        //|| server_key.full_propagate_parallelized(&mut q),
+        //|| server_key.full_propagate_parallelized(&mut r),
+        //);
         server_key.extend_radix_with_trivial_zero_blocks_msb_assign(&mut q, trim);
         let full_r = server_key.extend_radix_with_trivial_zero_blocks_msb(&r, trim);
 
@@ -461,11 +462,11 @@ pub fn inverse_mod_without_trim<const NB: usize, P: Numeral>(
     // implement extended euclidean algorithm
     // assume a < p. (no check)
     let a = server_key.extend_radix_with_trivial_zero_blocks_msb(&a.clone(), 1);
-    let mut r0 = server_key.create_trivial_radix(p, padded_nb);
+    let mut r0: RadixCiphertext = server_key.create_trivial_radix(p, padded_nb);
     let mut r1 = a;
     let mut was_done = server_key.create_trivial_radix(0, 1);
-    let mut t0 = server_key.create_trivial_radix(0, padded_nb);
-    let mut t1 = server_key.create_trivial_radix(1, padded_nb);
+    let mut t0: RadixCiphertext = server_key.create_trivial_radix(0, padded_nb);
+    let mut t1: RadixCiphertext = server_key.create_trivial_radix(1, padded_nb);
     let mut inv = server_key.create_trivial_radix(0, padded_nb);
 
     // euclidean algorithm
@@ -564,7 +565,7 @@ pub fn mul_mod_bitwise<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     // assume large p and a,b < p
-    let mut res = server_key.create_trivial_radix(0u64, NB);
+    let mut res: RadixCiphertext = server_key.create_trivial_radix(0u64, NB);
     let mut a_tmp = a.clone();
     let b_tmp = b.clone();
     let (mut b_next_tmp, mut bit) = rayon::join(
