@@ -1,5 +1,5 @@
 use fhe::{
-    ecdsa::ecdsa_sign,
+    ecdsa::{ecdsa_sign, ecdsa_sign_native},
     helper::{set_client_key, u256_from_decimal_string},
     numeral::Numeral,
     ops::secp256k1::prelude::*,
@@ -23,6 +23,13 @@ fn main() {
     );
     let msg = u256_from_decimal_string(
         "65108744961846543415519418389643270459525907322081164366671650776835723265410",
+    );
+
+    let signature_nativce = ecdsa_sign_native(sk, nonce, msg, *GENERATOR, *FQ_MODULO, *FR_MODULO);
+    println!(
+        "Native signature r: {}, s: {}",
+        signature_nativce.0.format(),
+        signature_nativce.1.format()
     );
 
     let sk_enc = client_key.encrypt_radix(sk, NUM_BLOCK);
