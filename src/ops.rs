@@ -19,7 +19,7 @@ use crate::{
     stats::{ProtocolLowOps, ProtocolStats},
 };
 
-use self::{mersenne::mul_mod_mersenne, primitive::parallel_fn};
+use self::{mersenne::mul_mod_mersenne, native::inverse_mod_native, primitive::parallel_fn};
 
 pub mod group_homogenous;
 pub mod group_jacobian;
@@ -176,18 +176,24 @@ pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
 ) -> RadixCiphertext {
     // implement binary gcd algorithm
     // assume a < p. (no check)
-    // This is a draft algo. TODO: remove hard coded test value.
+    let div_two = inverse_mod_native(P::TWO, p);
+
+    let mul_mod_div_two = |a: &RadixCiphertext| {
+        let mut res = server_key.smart_scalar_mul_parallelized(
+            &mut server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB),
+            div_two,
+        );
+        mod_mersenne::<NB, _>(&mut res, p, server_key)
+    };
+
     let mut a = a.clone();
-    let mut u: tfhe::integer::ciphertext::BaseRadixCiphertext<tfhe::shortint::Ciphertext> =
-        server_key.create_trivial_radix(1, NB);
     let mut b = server_key.create_trivial_radix(p, NB);
-    let mut v = server_key.create_trivial_radix(0, NB);
-    let mut was_done = server_key.create_trivial_radix(0, 1);
-    let loop_end = <P as Numeric>::BITS * 2;
-    let mut result = server_key.create_trivial_radix(0, NB);
+    let mut u: RadixCiphertext = server_key.create_trivial_radix(1, NB);
+    let mut v: RadixCiphertext = server_key.create_trivial_radix(0, NB);
+
     read_client_key(|server_key| {
         println!(
-            "a = {}\nb = {}\nu = {}\nv = {}\n-----",
+            "a = {}, b = {}, u = {}, v = {} -----",
             format(server_key.decrypt_radix::<P>(&a)),
             format(server_key.decrypt_radix::<P>(&b)),
             format(server_key.decrypt_radix::<P>(&u)),
@@ -195,131 +201,73 @@ pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
         )
     });
 
-    for _ in 0..loop_end {
-        // if a is even -> a = a/2, u = u/2
-        let mut a_is_odd = server_key.scalar_bitand_parallelized(&a, 1);
-        server_key.trim_radix_blocks_msb_assign(&mut a_is_odd, NB - 1);
-        let a_is_even = server_key
-            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_is_odd);
+    // if condition return a,b else b,a
+    let select_two = |condition: &RadixCiphertext, a: &RadixCiphertext, b: &RadixCiphertext| {
+        let (mut added, mut sel_a) = rayon::join(
+            || {
+                server_key.smart_add_parallelized(
+                    &mut server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1),
+                    &mut b.clone(),
+                )
+            },
+            || {
+                server_key.if_then_else_parallelized(
+                    &mut condition.clone(),
+                    &mut a.clone(),
+                    &mut b.clone(),
+                )
+            },
+        );
+        let sel_b = server_key.smart_sub_parallelized(&mut added, &mut sel_a);
+        (sel_a, server_key.trim_radix_blocks_msb(&sel_b, 1))
+    };
 
-        let a_c1 = server_key.scalar_right_shift_parallelized(&a, 1);
-        let b_c1 = b.clone();
+    for _i in 0..<P as Numeric>::BITS * 2 - 1 {
+        let _tmr = timer!(Level::Trace; "Inverse Mod Binary GCD", "Bit {}", _i);
 
-        let u_div_2 = mul_mod::<NB, _>(
-            &u,
-            &server_key.create_trivial_radix(126u64, NB), // TODO: fix this
-            p,
-            server_key,
-        ); // test for 251
-        let u_c1 = mersenne::mod_mersenne::<NB, _>(&u_div_2, p, server_key);
-        let v_c1 = v.clone();
-
-        // if a < b then (a, u, b, v) ← (b, v, a, u)
-        let mut a_lt_b = server_key.smart_lt_parallelized(&mut a.clone(), &mut b.clone());
+        let (mut a_mod_two, mut a_lt_b) = rayon::join(
+            || server_key.smart_scalar_bitand_parallelized(&mut a.clone(), 1),
+            || server_key.smart_lt_parallelized(&mut a.clone(), &mut b),
+        );
+        server_key.trim_radix_blocks_msb_assign(&mut a_mod_two, NB - 1);
         server_key.trim_radix_blocks_msb_assign(&mut a_lt_b, NB - 1);
-        let mut a_ge_b = server_key
-            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut a_lt_b);
-        let (mut sa, mut su, mut sb, mut sv) = (b.clone(), v.clone(), a.clone(), u.clone());
-        let sa_c2 = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut sa, &mut a_lt_b)
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut a, &mut a_ge_b)
-                .clone(),
-        );
-        let sb_c2 = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut sb, &mut a_lt_b)
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut b, &mut a_ge_b)
-                .clone(),
-        );
-        let su_c2 = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut su, &mut a_lt_b)
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut u, &mut a_ge_b)
-                .clone(),
-        );
-        let sv_c2 = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut sv, &mut a_lt_b)
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut v, &mut a_ge_b)
-                .clone(),
-        );
-        let a_c2 = server_key
-            .scalar_right_shift_parallelized(&server_key.sub_parallelized(&sa_c2, &sb_c2), 1);
+        let a_mod_two_and_lt_b = server_key.smart_bitand_parallelized(&mut a_mod_two, &mut a_lt_b);
 
-        let u_s_v = sub_mod::<NB, _>(&su_c2, &sv_c2, p, server_key);
-        let u_s_v_d2 = mul_mod::<NB, _>(
-            &u_s_v,
-            &server_key.create_trivial_radix(126u64, NB), // TODO: fix this
-            p,
-            server_key,
+        ((a, b), (u, v)) = rayon::join(
+            || select_two(&a_mod_two_and_lt_b, &b, &a),
+            || select_two(&a_mod_two_and_lt_b, &v, &u),
         );
-        let u_c2 = mersenne::mod_mersenne::<NB, _>(&u_s_v_d2, p, server_key);
-        let b_c2 = sb_c2;
-        let v_c2 = sv_c2;
 
-        // consolidate c1 and c2
+        (a, u) = rayon::join(
+            || {
+                let mult = server_key.smart_mul_parallelized(&mut b, &mut a_mod_two.clone());
+                sub_mod::<NB, _>(&a, &mult, p, server_key)
+                //server_key.sub_parallelized(&a, &mult)
+            },
+            || {
+                let mult = server_key.smart_mul_parallelized(&mut v, &mut a_mod_two.clone());
+                sub_mod::<NB, _>(&u, &mult, p, server_key)
+                //server_key.sub_parallelized(&u, &mult)
+            },
+        );
 
-        a = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut a_c1.clone(), &mut a_is_even.clone())
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut a_c2.clone(), &mut a_is_odd.clone())
-                .clone(),
+        (a, u) = rayon::join(
+            || server_key.scalar_right_shift_parallelized(&mut a, 1),
+            || mul_mod_div_two(&u),
         );
-        b = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut b_c1.clone(), &mut a_is_even.clone())
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut b_c2.clone(), &mut a_is_odd.clone())
-                .clone(),
-        );
-        u = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut u_c1.clone(), &mut a_is_even.clone())
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut u_c2.clone(), &mut a_is_odd.clone())
-                .clone(),
-        );
-        v = server_key.smart_add_parallelized(
-            &mut server_key
-                .smart_mul_parallelized(&mut v_c1.clone(), &mut a_is_even.clone())
-                .clone(),
-            &mut server_key
-                .smart_mul_parallelized(&mut v_c2.clone(), &mut a_is_odd.clone())
-                .clone(),
-        );
-        let mut done = server_key.smart_scalar_eq_parallelized(&mut a.clone(), 0);
-        let mut never_done = server_key
-            .smart_sub_parallelized(&mut server_key.create_trivial_radix(1, 1), &mut was_done);
-        let mut done_now = server_key.smart_bitand_parallelized(&mut done, &mut never_done);
-        server_key.smart_bitor_assign_parallelized(&mut was_done, &mut done);
-        // inv = inv + done_now * t1
-        let mut update = server_key.smart_mul_parallelized(&mut done_now, &mut v.clone());
-        server_key.smart_add_assign_parallelized(&mut result, &mut update);
+
         read_client_key(|server_key| {
             println!(
-                "a = {}\nb = {}\nu = {}\nv = {}\nresult {}\n-----",
+                "a = {}, b = {}, u = {}, v = {} -----",
                 format(server_key.decrypt_radix::<P>(&a)),
                 format(server_key.decrypt_radix::<P>(&b)),
                 format(server_key.decrypt_radix::<P>(&u)),
                 format(server_key.decrypt_radix::<P>(&v)),
-                format(server_key.decrypt_radix::<P>(&result))
             )
         });
     }
-    result.clone()
+
+    v
 }
 
 /// a^-1 mod p where a*a^-1 = 1 mod p
@@ -382,7 +330,7 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     // NB/2 best case and NB worst case
     let loop_end = <P as Numeric>::BITS + 1;
     for i in 0..loop_end {
-        let _tmr = (i % 10 == 0).then_some(|| timer!(Level::Trace; "Inverse Mod", "Bit {}", i));
+        let _tmr = timer!(Level::Trace; "Inverse Mod", "Bit {}", i);
         // q, r = r0 / r1
         let (mut q, r) = server_key.smart_div_rem_parallelized(&mut r0.clone(), &mut r1.clone());
 
@@ -769,7 +717,7 @@ mod tests {
         helper::set_client_key,
         numeral::Numeral,
         ops::{
-            add_mod, double_mod, inverse_mod, inverse_mods,
+            add_mod, double_mod, inverse_mod, inverse_mod_binary_gcd, inverse_mods,
             mersenne::mod_mersenne,
             mul_mod, mul_mod_constant, multi_add_mod,
             native::{inverse_mod_native, mul_mod_native, sub_mod_native},
@@ -993,6 +941,42 @@ mod tests {
         let enc_l =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
         assert_eq!(l, client_key.decrypt_radix::<u8>(&enc_l));
+    }
+
+    #[test]
+    #[ignore = "bench"]
+    fn bench_inverse() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        set_client_key(&client_key);
+        const NUM_BLOCK: usize = 4;
+        type Integer = u8;
+        let p: Integer = 251;
+        let a: Integer = 147;
+
+        //const NUM_BLOCK: usize = 8;
+        //type Integer = u16;
+        //let p: Integer = 65521;
+        //let a: Integer = 50725;
+
+        let c = inverse_mod_native(a, p);
+
+        let timer = Instant::now();
+        let enc_c = inverse_mod_binary_gcd::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        println!(
+            "inverse_mod_binary_gcd: {:.2}s",
+            timer.elapsed().as_secs_f32()
+        );
+        assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c));
+
+        let timer = Instant::now();
+        let enc_c_other =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        println!("inverse_mod: {:.2}s", timer.elapsed().as_secs_f32());
+        assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c_other));
     }
 
     #[test]
