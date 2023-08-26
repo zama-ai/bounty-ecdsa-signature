@@ -1,9 +1,22 @@
 # TFHECDSA (TFHE ECDSA)
 This repo is a tutorial/experiment/technical-report on implementing Fully Homomorphic Encrypted Elliptic Curve Digital Signature Algorithm (ECDSA) for using TFHE. I'm try to give some intro to each key concept. feel free to skip ahead. 
 table of content
+- YOLO run ?
 - Intro to tech
 - Design constraint
 - Technical detail
+- Features
+- Failed experiments logs
+
+## YOLO run
+if you just want to run the experiment now. 
+- [install rust](https://www.rust-lang.org/tools/install)
+- clone this repo.
+- update `Cargo.toml` to fit your machine. see [TFHE Supported platforms](https://docs.zama.ai/tfhe-rs/getting-started/installation#supported-platforms) for more info.
+- (optional) open `tmux` or equivalence if you're on a remote server.
+- run `cargo run --release --example ecdsa`.
+- now you have `~1-2 days` to read this doc if you're on a 64-cores machine.
+
 
 ## Intro
 ### (Fully) Homomorphic Encryption (FHE)
@@ -38,3 +51,9 @@ bitops < add, sub << mul <<< sub
 
 ### control flow
 you can't do treditional control flow on encrypted data.
+
+
+## Failed experiments logs
+- bit-and-based Selector, not as fast when have high bits e.g 256 bits. kinda faster when have 8 or 16 bits.
+- binary GCD - not really faster than trimmed extended euclidient 
+- a bunch of mod related tricks, mersenne based algo is the fastest so far
