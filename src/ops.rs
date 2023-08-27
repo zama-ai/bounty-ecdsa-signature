@@ -278,7 +278,10 @@ pub fn inverse_mod<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    inverse_mod_trim::<NB, _>(a, p, server_key)
+    #[cfg(feature = "binary_gcd")]
+    return inverse_mod_binary_gcd::<NB, _>(a, p, server_key);
+    #[cfg(not(feature = "binary_gcd"))]
+    return inverse_mod_trim::<NB, _>(a, p, server_key);
 }
 
 #[inline]
