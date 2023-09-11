@@ -17,7 +17,9 @@ use crate::{
             group_projective_scalar_mul_constant, group_projective_scalar_mul_constant_windowed,
             group_projective_scalar_mul_native,
         },
-        inverse_mod, inverse_mods, modulo_fast, mul_mod,
+        inverse_mod, inverse_mods,
+        mersenne::mod_mersenne,
+        modulo_fast, mul_mod,
         native::{add_mod_native, inverse_mod_native, modulo_native, mul_mod_native},
     },
     WINDOW,
@@ -57,7 +59,11 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     });
     // r = x
     // s = k^-1 * (m + r * sk)
-    let r = modulo_fast::<NB, _>(&x, r_modulo, server_key);
+    let r = if q_modulo > r_modulo && q_modulo <= P::TWO * r_modulo {
+        modulo_fast::<NB, _>(&x, r_modulo, server_key)
+    } else {
+        mod_mersenne::<NB, _>(&x, r_modulo, server_key)
+    };
     read_client_key(|client_key| {
         println!("k^-1 = {}", P::decrypt(&k_inv, client_key).format());
     });

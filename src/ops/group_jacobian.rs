@@ -786,6 +786,8 @@ mod tests {
         group_projective_double_native, group_projective_into_affine_native,
     };
 
+    use super::group_projective_scalar_mul_native;
+
     #[test]
     fn correct_jacobian_double() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
@@ -867,5 +869,22 @@ mod tests {
 
         assert_eq!(xn, 157);
         assert_eq!(yn, 22);
+    }
+
+    #[test]
+    fn correct_native_scalar_mul() {
+        let p: u8 = 251;
+        let x: u8 = 8;
+        let y: u8 = 45;
+
+        let scalar: u8 = 6;
+        let g = group_projective_scalar_mul_native(x, y, scalar, p);
+        let affine = group_projective_into_affine_native(g.0, g.1, g.2, p);
+        assert_eq!(affine, (176, 125));
+
+        let scalar: u8 = 26;
+        let g = group_projective_scalar_mul_native(x, y, scalar, p);
+        let affine = group_projective_into_affine_native(g.0, g.1, g.2, p);
+        assert_eq!(affine, (92, 120));
     }
 }

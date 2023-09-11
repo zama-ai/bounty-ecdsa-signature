@@ -5,8 +5,12 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[profile.release]
-lto = "fat"
+#[profile.release]
+#lto = "fat"
+
+#[profile.release_lto_off]
+#inherits = "release"
+#lto = "off"
 
 [dependencies]
 num-bigint = { version = "0.4.3", default-features = false }
