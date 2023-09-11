@@ -786,7 +786,9 @@ mod tests {
         group_projective_double_native, group_projective_into_affine_native,
     };
 
-    use super::group_projective_scalar_mul_native;
+    use super::{
+        group_projective_scalar_mul_constant_windowed, group_projective_scalar_mul_native,
+    };
 
     #[test]
     fn correct_jacobian_double() {
@@ -812,9 +814,11 @@ mod tests {
         let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
         let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
 
-        assert_eq!(x_dec, 134);
-        assert_eq!(y_dec, 104);
-        assert_eq!(z_dec, 90);
+        let res = group_projective_double_native(x1, y1, 1, p);
+
+        assert_eq!(x_dec, res.0);
+        assert_eq!(y_dec, res.1);
+        assert_eq!(z_dec, res.2);
     }
 
     #[test]
@@ -851,6 +855,37 @@ mod tests {
         let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
 
         let res = group_projective_add_affine_native(x1, y1, z1, x2, y2, p);
+
+        assert_eq!(x_dec, res.0);
+        assert_eq!(y_dec, res.1);
+        assert_eq!(z_dec, res.2);
+    }
+
+    #[test]
+    fn correct_jacobian_scalar_mul() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+
+        const NUM_BLOCK: usize = 4;
+        type Integer = u8;
+        let p: u8 = 251;
+        let x: u8 = 8;
+        let y: u8 = 45;
+        let scalar: u8 = 6;
+        let ct_scalar = client_key.encrypt_radix(scalar, NUM_BLOCK);
+
+        let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<4, NUM_BLOCK, _>(
+            x,
+            y,
+            &ct_scalar,
+            p,
+            &server_key,
+        );
+
+        let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
+        let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
+        let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+
+        let res = group_projective_scalar_mul_native(x, y, scalar, p);
 
         assert_eq!(x_dec, res.0);
         assert_eq!(y_dec, res.1);

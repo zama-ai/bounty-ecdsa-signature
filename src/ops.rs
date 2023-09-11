@@ -709,7 +709,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "bench"]
     fn bench_inverse() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         set_client_key(&client_key);
@@ -718,29 +717,17 @@ mod tests {
         let p: Integer = 251;
         let a: Integer = 147;
 
-        //const NUM_BLOCK: usize = 8;
-        //type Integer = u16;
-        //let p: Integer = 65521;
-        //let a: Integer = 50725;
-
         let c = inverse_mod_native(a, p);
 
-        let timer = Instant::now();
         let enc_c = inverse_mod_binary_gcd::<NUM_BLOCK, _>(
             &client_key.encrypt_radix(a, NUM_BLOCK),
             p,
             &server_key,
         );
-        println!(
-            "inverse_mod_binary_gcd: {:.2}s",
-            timer.elapsed().as_secs_f32()
-        );
         assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c));
 
-        let timer = Instant::now();
         let enc_c_other =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
-        println!("inverse_mod: {:.2}s", timer.elapsed().as_secs_f32());
         assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c_other));
     }
 
@@ -770,6 +757,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "bench"]
     fn parallel_mod_reduc_mul() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
 
@@ -797,22 +785,5 @@ mod tests {
             || mod_mersenne::<NUM_BLOCK, _>(&ct_x1, p, &server_key),
         );
         println!("parallel_mod_mersenne: {:.2}s", now.elapsed().as_secs_f32());
-    }
-
-    #[test]
-    fn correct_sub_wrap() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-
-        const NUM_BLOCK: usize = 8;
-
-        let x1 = 1u8;
-        let mut ct_x1 = client_key.encrypt_radix(x1, 1);
-
-        let res = server_key.sub_parallelized(
-            &mut server_key.create_trivial_radix(0, NUM_BLOCK + 1),
-            &mut ct_x1,
-        );
-
-        println!("res: {}", u8::decrypt_bigint(&res, &client_key));
     }
 }
