@@ -100,11 +100,9 @@ pub fn u256_from_decimal_string(s: &str) -> U256 {
 }
 
 pub fn read_client_key<F: FnOnce(&ClientKey)>(f: F) {
-    CLIENT_KEY
-        .read()
-        .unwrap()
-        .as_ref()
-        .inspect(|client_key| f(client_key));
+    if let Some(client_key) = CLIENT_KEY.read().unwrap().as_ref() {
+        f(client_key);
+    }
 }
 
 pub fn set_client_key(client_key: &ClientKey) {

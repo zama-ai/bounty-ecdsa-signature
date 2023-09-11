@@ -1,8 +1,10 @@
 use rayon::prelude::*;
 
 pub fn parallel_fn<T: Clone + Send, F: Fn(&T, &T) -> T + Sync>(values: &[T], f: F) -> T {
-    if values.len() > 1 {
-        parallel_fn(
+    match values.len() {
+        0 => panic!("Empty slices"),
+        1 => values[0].clone(),
+        _ => parallel_fn(
             &values
                 .to_vec()
                 .into_par_iter()
@@ -13,9 +15,7 @@ pub fn parallel_fn<T: Clone + Send, F: Fn(&T, &T) -> T + Sync>(values: &[T], f: 
                 })
                 .collect::<Vec<_>>(),
             f,
-        )
-    } else {
-        values[0].clone()
+        ),
     }
 }
 

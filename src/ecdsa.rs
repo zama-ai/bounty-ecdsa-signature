@@ -104,7 +104,7 @@ pub fn ecdsa_sign_native<P: Numeral>(
 
 pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     public_key: (P, P),
-    mut signature: (RadixCiphertext, RadixCiphertext),
+    signature: (RadixCiphertext, RadixCiphertext),
     message: P,
     generator: (P, P),
     q_modulo: P,
@@ -137,21 +137,21 @@ pub fn ecdsa_verify<const NB: usize, P: Numeral>(
     >(
         public_key.0, public_key.1, &u2, q_modulo, server_key
     );
-    let (x_proj, y_proj, mut z_proj) = group_projective_add_projective::<NB, _>(
+    let (x_proj, y_proj, z_proj) = group_projective_add_projective::<NB, _>(
         &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, q_modulo, server_key,
     );
-    let mut is_z_zero = server_key.smart_scalar_eq_parallelized(&mut z_proj, 0);
+    let is_z_zero = server_key.scalar_eq_parallelized(&z_proj, 0);
     let (x, _y) =
         group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
-    let mut x_mod_scalar = modulo_fast::<NB, _>(&x, r_modulo, server_key);
-    let mut is_x_eq_r = server_key.smart_eq_parallelized(&mut x_mod_scalar, &mut signature.0);
+    let x_mod_scalar = modulo_fast::<NB, _>(&x, r_modulo, server_key);
+    let is_x_eq_r = server_key.eq_parallelized(&x_mod_scalar, &signature.0);
 
     println!(
         "ecdsa verify done in {:.2}s",
         ops_start.elapsed().as_secs_f64(),
     );
     // valid if z != 0 && x == r
-    server_key.smart_bitand_parallelized(&mut is_z_zero, &mut is_x_eq_r)
+    server_key.bitand_parallelized(&is_z_zero, &is_x_eq_r)
 }
 
 #[cfg(test)]

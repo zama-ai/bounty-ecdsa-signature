@@ -88,10 +88,9 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
         let m = from_bigint::<U512>(&m_bigint);
         let mut x =
             server_key.extend_radix_with_trivial_zero_blocks_msb(x, NB + block_to_add as usize);
-        let mut q = server_key.smart_scalar_mul_parallelized(&mut x, m);
+        let mut q = server_key.scalar_mul_parallelized(&x, m);
         server_key.scalar_right_shift_assign_parallelized(&mut q, k as u64);
-        server_key
-            .sub_assign_parallelized(&mut x, &server_key.smart_scalar_mul_parallelized(&mut q, p));
+        server_key.sub_assign_parallelized(&mut x, &server_key.scalar_mul_parallelized(&q, p));
         let len = x.blocks().len();
         server_key.trim_radix_blocks_msb_assign(&mut x, len - (NB + 1));
 
@@ -103,34 +102,30 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
     // first pass NB*2 blocks
     let x_mod_p = (|x: &RadixCiphertext| {
         let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
-        let mut b = server_key.smart_sub_parallelized(
-            &mut x.clone(),
-            &mut server_key.scalar_left_shift_parallelized(&a, n as u64),
-        );
+        let mut b = server_key
+            .sub_parallelized(x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
 
         let len = x.blocks().len();
         // a will be multiplied by c, so it must be at least NB + c_blocks long
         server_key.trim_radix_blocks_msb_assign(&mut a, len - (NB + c_blocks));
         // b must be at least NB long
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+        let ca = server_key.scalar_mul_parallelized(&a, bigint_to_u128(&c));
         server_key.add_parallelized(&ca, &b)
     })(&x);
 
     // second pass % NB + c_blocks blocks
     let x_mod_p2 = (|x: &RadixCiphertext| {
         let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
-        let mut b = server_key.smart_sub_parallelized(
-            &mut x.clone(),
-            &mut server_key.scalar_left_shift_parallelized(&a, n as u64),
-        );
+        let mut b = server_key
+            .sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
 
         let len = x.blocks().len();
         // a will be multiplied by c, so it must be at least NB + 1 long
         server_key.trim_radix_blocks_msb_assign(&mut a, len - (NB + 1));
         // b must be at least NB long
         server_key.trim_radix_blocks_msb_assign(&mut b, len - NB);
-        let ca = server_key.smart_scalar_mul_parallelized(&mut a, bigint_to_u128(&c));
+        let ca = server_key.scalar_mul_parallelized(&a, bigint_to_u128(&c));
         server_key.add_parallelized(&ca, &b)
     })(&x_mod_p);
 
@@ -145,7 +140,7 @@ pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
-    server_key.smart_mul_assign_parallelized(&mut a_expanded, &mut b.clone());
+    server_key.mul_assign_parallelized(&mut a_expanded, &b);
     mod_mersenne::<NB, _>(&a_expanded, p, server_key)
 }
 
