@@ -100,42 +100,6 @@ pub fn selector(
     server_key.add_parallelized(&r0, &r1)
 }
 
-/// a_0 + a_1 + ... + a_n mod p
-pub fn multi_add_mod<const NB: usize, P: Numeral>(
-    a: &[RadixCiphertext],
-    p: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    // assume large p and a,b < p
-    // add all elements in a together
-    let le = a.len();
-    // find bit length of le
-    let log_le = UnsignedInteger::ceil_ilog2(le) as usize;
-    // find block length of le
-    let extend = log_le / 2 + 1;
-
-    // create sum object
-    let mut sum = server_key.extend_radix_with_trivial_zero_blocks_msb(&a[0], extend);
-
-    // just sum all elements
-    for ai in a {
-        //let mut tmp = server_key.extend_radix_with_trivial_zero_blocks_msb(&a[i].clone(), extend);
-        server_key.add_assign_parallelized(&mut sum, ai);
-    }
-    // only check with p*2^i from high to low
-    for i in (0..le).rev() {
-        // to_check = p * 2^i = p << i
-        let mut to_check = server_key.create_trivial_radix(p, NB + extend);
-        server_key.scalar_left_shift_assign_parallelized(&mut to_check, i as u64);
-        let mut is_gt = server_key.gt_parallelized(&sum, &to_check);
-        server_key.trim_radix_blocks_msb_assign(&mut is_gt, NB + extend - 1);
-        let to_sub = server_key.mul_parallelized(&to_check, &is_gt);
-        server_key.sub_assign_parallelized(&mut sum, &to_sub);
-    }
-
-    sum
-}
-
 /// turn x mod a to x mod b
 /// only if a > b and a < 2b
 #[time("trace", "Modulus Reduction")]
@@ -364,7 +328,7 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     let to_sub =
         server_key.mul_parallelized(&server_key.create_trivial_radix(p, padded_nb), &is_gt);
     server_key.sub_assign_parallelized(&mut inv, &to_sub);
-    //server_key.full_propagate_parallelized(&mut inv);
+    server_key.full_propagate_parallelized(&mut inv);
 
     inv
 }
@@ -552,7 +516,7 @@ mod tests {
         ops::{
             add_mod, double_mod, inverse_mod, inverse_mod_binary_gcd, inverse_mods,
             mersenne::mod_mersenne,
-            mul_mod, mul_mod_constant, multi_add_mod,
+            mul_mod, mul_mod_constant,
             native::{inverse_mod_native, mul_mod_native, sub_mod_native},
             sub_mod,
         },
@@ -693,38 +657,6 @@ mod tests {
         let g = mul_mod_native(f, f, p);
         let enc_g = mul_mod::<NUM_BLOCK, _>(&enc_f, &enc_f, p, &server_key);
         assert_eq!(g as u8, client_key.decrypt_radix::<u8>(&enc_g));
-    }
-
-    #[test]
-    fn correct_multi_add_mod() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        const NUM_BLOCK: usize = 4;
-        let p: u8 = 251;
-
-        let multi_add_mod_naive =
-            |a: &[u128]| a.iter().copied().fold(0, |a, b| (a + b) % p as u128);
-
-        let a: [u128; 4] = [248, 249, 250, 251];
-        let b: [u128; 4] = [251, 250, 249, 248];
-        let c: u128 = multi_add_mod_naive(&a);
-        let enc_c = multi_add_mod::<NUM_BLOCK, _>(
-            &a.iter()
-                .map(|a| client_key.encrypt_radix(*a, NUM_BLOCK))
-                .collect::<Vec<_>>(),
-            p,
-            &server_key,
-        );
-        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
-
-        let d = multi_add_mod_naive(&b);
-        let enc_d = multi_add_mod::<NUM_BLOCK, _>(
-            &b.iter()
-                .map(|a| client_key.encrypt_radix(*a, NUM_BLOCK))
-                .collect::<Vec<_>>(),
-            p,
-            &server_key,
-        );
-        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
     }
 
     #[test]
