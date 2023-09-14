@@ -516,36 +516,14 @@ mod tests {
             add_mod, double_mod, inverse_mod, inverse_mod_binary_gcd, inverse_mods,
             mersenne::mod_mersenne,
             mul_mod, mul_mod_constant,
-            native::{inverse_mod_native, mul_mod_native, sub_mod_native},
-            sub_mod,
+            native::{
+                add_mod_native, double_mod_native, inverse_mod_native, mul_mod_native,
+                square_mod_native, sub_mod_native,
+            },
+            square_mod, sub_mod,
         },
         CLIENT_KEY,
     };
-
-    #[test]
-    #[ignore = "bench"]
-    fn bench_8a() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-
-        const NUM_BLOCK: usize = 8;
-        type Integer = u16;
-        let p: Integer = 13841;
-        let a: Integer = 13820;
-        let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
-
-        let timer = Instant::now();
-        let enc_2a = double_mod::<NUM_BLOCK, _>(&enc_a, p, &server_key);
-        let enc_4a = double_mod::<NUM_BLOCK, _>(&enc_2a, p, &server_key);
-        let _enc_8a = double_mod::<NUM_BLOCK, _>(&enc_4a, p, &server_key);
-        println!("8a using addition - {:.2}s", timer.elapsed().as_secs());
-
-        let timer = Instant::now();
-        let _enc_8a_mul = mul_mod_constant::<NUM_BLOCK, _>(&enc_a, 8, p, &server_key);
-        println!(
-            "8a using multiplication - {:.2}s",
-            timer.elapsed().as_secs()
-        );
-    }
 
     #[test]
     fn correct_add_mod() {
@@ -553,9 +531,9 @@ mod tests {
         const NUM_BLOCK: usize = 4;
         let p: u8 = 251;
 
-        let a: u128 = 248;
-        let b: u128 = 249;
-        let c: u128 = (a + b) % p as u128;
+        let a = 248;
+        let b = 249;
+        let c = add_mod_native(a, b, p);
         let enc_c = add_mod::<NUM_BLOCK, _>(
             &client_key.encrypt_radix(a, NUM_BLOCK),
             &client_key.encrypt_radix(b, NUM_BLOCK),
@@ -564,11 +542,11 @@ mod tests {
         );
         assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
 
-        let d = (c + c) % p as u128;
+        let d = add_mod_native(c, c, p);
         let enc_d = add_mod::<NUM_BLOCK, _>(&enc_c, &enc_c, p, &server_key);
         assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
 
-        let e = (c + a) % p as u128;
+        let e = add_mod_native(c, a, p);
         let enc_e = add_mod::<NUM_BLOCK, _>(
             &enc_c,
             &client_key.encrypt_radix(a, NUM_BLOCK),
@@ -577,7 +555,7 @@ mod tests {
         );
         assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
 
-        let f = (e + b) % p as u128;
+        let f = add_mod_native(e, b, p);
         let enc_f = add_mod::<NUM_BLOCK, _>(
             &enc_e,
             &client_key.encrypt_radix(b, NUM_BLOCK),
@@ -591,10 +569,10 @@ mod tests {
     fn correct_sub_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         const NUM_BLOCK: usize = 4;
-        let p: u128 = 251;
-        let a: u128 = 248;
-        let b: u128 = 249;
-        let c: u128 = sub_mod_native(a, b, p);
+        let p: u8 = 251;
+        let a = 248;
+        let b = 249;
+        let c = sub_mod_native(a, b, p);
 
         let enc_c = sub_mod::<NUM_BLOCK, _>(
             &client_key.encrypt_radix(a, NUM_BLOCK),
@@ -619,14 +597,60 @@ mod tests {
     }
 
     #[test]
+    fn correct_double_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = 248;
+        let b = 249;
+        let c = double_mod_native(a, p);
+
+        let enc_c =
+            double_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = double_mod_native(c, p);
+        let enc_d = double_mod::<NUM_BLOCK, _>(&enc_c, p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+
+        let e = double_mod_native(b, p);
+        let enc_e =
+            double_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
+        assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+    }
+
+    #[test]
+    fn correct_square_mod() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = 248;
+        let b = 249;
+        let c = square_mod_native(a, p);
+
+        let enc_c =
+            square_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = square_mod_native(c, p);
+        let enc_d = square_mod::<NUM_BLOCK, _>(&enc_c, p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+
+        let e = square_mod_native(b, p);
+        let enc_e =
+            square_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
+        assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+    }
+
+    #[test]
     fn correct_mul_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
         const NUM_BLOCK: usize = 4;
-        let p: u128 = 251;
-        let a: u128 = 249;
-        let b: u128 = 248;
-        let c: u128 = mul_mod_native(a, b, p);
+        let p: u8 = 251;
+        let a = 249;
+        let b = 248;
+        let c = mul_mod_native(a, b, p);
 
         let enc_c = mul_mod::<NUM_BLOCK, _>(
             &client_key.encrypt_radix(a, NUM_BLOCK),
@@ -664,12 +688,12 @@ mod tests {
         set_client_key(&client_key);
         const NUM_BLOCK: usize = 4;
         let p: u8 = 157;
-        let a: u8 = 8;
-        let b: u8 = 6;
-        let e: u8 = 45;
-        let f: u8 = 123;
-        let h: u8 = 127;
-        let i: u8 = 156;
+        let a = 8;
+        let b = 6;
+        let e = 45;
+        let f = 123;
+        let h = 127;
+        let i = 156;
 
         let c = inverse_mod_native(a, p);
         let enc_c =
@@ -736,8 +760,8 @@ mod tests {
         set_client_key(&client_key);
         const NUM_BLOCK: usize = 4;
         let p: u8 = 157;
-        let a: u8 = 8;
-        let b: u8 = 123;
+        let a = 8;
+        let b = 123;
 
         let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
         let enc_b = client_key.encrypt_radix(b, NUM_BLOCK);
