@@ -781,9 +781,13 @@ mod tests {
 
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
-    use crate::ops::group_jacobian::{
-        group_projective_add_affine, group_projective_add_affine_native, group_projective_double,
-        group_projective_double_native, group_projective_into_affine_native,
+    use crate::{
+        ops::group_jacobian::{
+            group_projective_add_affine, group_projective_add_affine_native,
+            group_projective_double, group_projective_double_native, group_projective_into_affine,
+            group_projective_into_affine_native,
+        },
+        WINDOW,
     };
 
     use super::{
@@ -873,23 +877,22 @@ mod tests {
         let scalar: u8 = 6;
         let ct_scalar = client_key.encrypt_radix(scalar, NUM_BLOCK);
 
-        let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<4, NUM_BLOCK, _>(
-            x,
-            y,
-            &ct_scalar,
-            p,
-            &server_key,
-        );
+        let (x_new, y_new, z_new) = group_projective_scalar_mul_constant_windowed::<
+            WINDOW,
+            NUM_BLOCK,
+            _,
+        >(x, y, &ct_scalar, p, &server_key);
+        let (x_final, y_final) =
+            group_projective_into_affine::<NUM_BLOCK, _>(&x_new, &y_new, &z_new, p, &server_key);
 
-        let x_dec = client_key.decrypt_radix::<Integer>(&x_new);
-        let y_dec = client_key.decrypt_radix::<Integer>(&y_new);
-        let z_dec = client_key.decrypt_radix::<Integer>(&z_new);
+        let x_dec = client_key.decrypt_radix::<Integer>(&x_final);
+        let y_dec = client_key.decrypt_radix::<Integer>(&y_final);
 
         let res = group_projective_scalar_mul_native(x, y, scalar, p);
+        let res = group_projective_into_affine_native(res.0, res.1, res.2, p);
 
         assert_eq!(x_dec, res.0);
         assert_eq!(y_dec, res.1);
-        assert_eq!(z_dec, res.2);
     }
 
     #[test]
