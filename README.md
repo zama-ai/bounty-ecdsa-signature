@@ -1,15 +1,11 @@
 # TFHECDSA (TFHE ECDSA)
-This repo is a tutorial/experiment/technical-report on implementing Fully Homomorphic Encrypted Elliptic Curve Digital Signature Algorithm (ECDSA) for using TFHE. I'm try to give some intro to each key concept. feel free to skip ahead. 
-table of content
-- YOLO run ?
-- Intro to tech
-- Design constraint
-- Technical detail
-- Features
-- Failed experiments logs
+
+This repo is a tutorial/experiment/technical-report on implementing Fully Homomorphic Encrypted Elliptic Curve Digital Signature Algorithm (ECDSA) for using TFHE. I'm try to give some intro to each key concept. feel free to skip ahead.
 
 ## YOLO run
-if you just want to run the experiment now. 
+
+if you just want to run the experiment now.
+
 - [install rust](https://www.rust-lang.org/tools/install)
 - clone this repo.
 - update `Cargo.toml` to fit your machine. see [TFHE Supported platforms](https://docs.zama.ai/tfhe-rs/getting-started/installation#supported-platforms) for more info.
@@ -17,43 +13,29 @@ if you just want to run the experiment now.
 - run `cargo run --release --example ecdsa`.
 - now you have `~1-2 days` to read this doc if you're on a 64-cores machine.
 
+## Logging
 
-## Intro
-### (Fully) Homomorphic Encryption (FHE)
-`tl;dr` is homomorphic encryption allow us to do math on encrypted data. informally you can think about it as
+There's 3 level of logging built-in in the crates: `Info`, `Debug`, `Traces`. Default value is configured to `Debug`.
+
+- Info - High level operation logging: all ECDSA operation, all group operation, scalar mul bit operation.
+- Debug - Low level operation logging: all field operation.
+- Trace - Auxilary, loop, and super low level logging: inverse mod bit, pow mod bit, selector, modular reduction,etc.
+
+### Custom Logging Level
+
+Use `RUST_LOG="level"` and then cargo command to force Rust to use that level of logging. For example,
+
+```bash
+RUST_LOG="info" cargo test --release -- --nocapture correct_inverse
 ```
-E(a) + E(b) = E(a + b)it will ended up the same
-or 
-E(f(a)) = f(E(a))
-```
 
-the fully homomorphic encryption basically mean you can do both `+` and `x` with the encrypted data. long story short, if you can do both you can compute anything. (might be super slow tho)
+### Tweak Loggin
 
-### TFHE 
-it's one of the leading FHE lib right now. you can read more about it [here](https://zama.ai).
+We use `logging_timer` to automatically log our function runtime.
 
-### Elliptic Curve Digital Signature Algorithm (ECDSA)
-so it's digital signature is basically digital version of signature that you use to sign things and allow others to verify authenticity of the things you signed. if you're in blockchain this is what happened when you sign a transaction. this algorithm also use behind the scene of a lot of things in your everyday life. 
+To remove/add timer, find these 2 patterns of code.
 
-Elliptic Curve is a weird curve lol
-$$y^{2}=x^{3}+ax+b$$
-I'll talk about it's property later. 
-for now just know that this curve is the key building block for the signature algorithm that we working on.
-
-### Finite Field Arithmetic
-tl;dr just imagine you have limited number to work with like do math with your fingures or do math on a clock. turn out this is super useful in cryptography and super slow to compute.
-
-## Design constraint
-before we dive into how we build this. let's give some context about constraint in working with (T)FHE.
-
-### speed
-bitops < add, sub << mul <<< sub
-
-### control flow
-you can't do treditional control flow on encrypted data.
-
-
-## Failed experiments logs
-- bit-and-based Selector, not as fast when have high bits e.g 256 bits. kinda faster when have 8 or 16 bits.
-- binary GCD - not really faster than trimmed extended euclidient 
-- a bunch of mod related tricks, mersenne based algo is the fastest so far
+- Function macros - `#[time("info", "Group Projective Add")]` decorated on top of function will print out the timer when the function ends
+- Inline macros
+  - `let cal_bits_tmr = timer!(Level::Debug; "Calculating bits");` - `timer!` will print out timer when the timer object was dropped
+  - `let _tmr = stimer!(Level::Info; "Scalar Mul", "Bits {:?}", _ic);` - `stimer!` will print out timer when the timer object was initialized and dropped
