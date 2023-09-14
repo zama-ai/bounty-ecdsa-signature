@@ -189,8 +189,8 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
     // y'' =  y' * is_z0_z1_non_zero + (y0 + y1) * not_is_z0_z1_non_zero
     // z'' =  z' * is_z0_z1_non_zero + (z0 + z1) * not_is_z0_z1_non_zero
     let (mut is_z0_non_zero, mut is_z1_non_zero) = rayon::join(
-        || server_key.scalar_ne_parallelized(&z, 0),
-        || server_key.scalar_ne_parallelized(&other_flag_bit, 0),
+        || server_key.scalar_ne_parallelized(z, 0),
+        || server_key.scalar_ne_parallelized(other_flag_bit, 0),
     );
     server_key.trim_radix_blocks_msb_assign(&mut is_z0_non_zero, NB - 1);
     server_key.trim_radix_blocks_msb_assign(&mut is_z1_non_zero, NB - 1);
@@ -206,7 +206,7 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
                         || server_key.mul_parallelized(&x3, &is_z0_z1_non_zero),
                         || {
                             server_key.mul_parallelized(
-                                &server_key.add_parallelized(&x, &other_x),
+                                &server_key.add_parallelized(x, other_x),
                                 &not_is_z0_z1_non_zero,
                             )
                         },
@@ -217,7 +217,7 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
                         || server_key.mul_parallelized(&y3, &is_z0_z1_non_zero),
                         || {
                             server_key.mul_parallelized(
-                                &server_key.add_parallelized(&y, &other_y),
+                                &server_key.add_parallelized(y, other_y),
                                 &not_is_z0_z1_non_zero,
                             )
                         },
@@ -230,7 +230,7 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
                 || server_key.mul_parallelized(&z3, &is_z0_z1_non_zero),
                 || {
                     server_key.mul_parallelized(
-                        &server_key.add_parallelized(&z, &other_flag_bit),
+                        &server_key.add_parallelized(z, other_flag_bit),
                         &not_is_z0_z1_non_zero,
                     )
                 },
@@ -421,8 +421,8 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
     // y'' =  y' * is_z0_z1_non_zero + (y0 + y1) * not_is_z0_z1_non_zero
     // z'' =  z' * is_z0_z1_non_zero + (z0 + z1) * not_is_z0_z1_non_zero
     let (mut is_z0_non_zero, mut is_z1_non_zero) = rayon::join(
-        || server_key.scalar_ne_parallelized(&z0, 0),
-        || server_key.scalar_ne_parallelized(&z1, 0),
+        || server_key.scalar_ne_parallelized(z0, 0),
+        || server_key.scalar_ne_parallelized(z1, 0),
     );
     server_key.trim_radix_blocks_msb_assign(&mut is_z0_non_zero, NB - 1);
     server_key.trim_radix_blocks_msb_assign(&mut is_z1_non_zero, NB - 1);
@@ -438,7 +438,7 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
                         || server_key.mul_parallelized(&x_prime, &is_z0_z1_non_zero),
                         || {
                             server_key.mul_parallelized(
-                                &server_key.add_parallelized(&x0, &x1),
+                                &server_key.add_parallelized(x0, x1),
                                 &not_is_z0_z1_non_zero.clone(),
                             )
                         },
@@ -449,7 +449,7 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
                         || server_key.mul_parallelized(&y_prime, &is_z0_z1_non_zero),
                         || {
                             server_key.mul_parallelized(
-                                &server_key.add_parallelized(&y0, &y1),
+                                &server_key.add_parallelized(y0, y1),
                                 &not_is_z0_z1_non_zero,
                             )
                         },
@@ -462,7 +462,7 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
                 || server_key.mul_parallelized(&z_prime, &is_z0_z1_non_zero),
                 || {
                     server_key.mul_parallelized(
-                        &server_key.add_parallelized(&z0, &z1),
+                        &server_key.add_parallelized(z0, z1),
                         &not_is_z0_z1_non_zero,
                     )
                 },
@@ -697,7 +697,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
                     })
                     .collect::<Vec<_>>();
                 let selected_bit =
-                    parallel_fn(&bits, |b0, b1| server_key.bitand_parallelized(&b0, &b1));
+                    parallel_fn(&bits, |b0, b1| server_key.bitand_parallelized(b0, b1));
                 rayon::join(
                     || selector_zero_constant::<NB, _>(point.0, &selected_bit, server_key),
                     || selector_zero_constant::<NB, _>(point.1, &selected_bit, server_key),
@@ -714,7 +714,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
 
         // check if all bits are not zero for flag bit
         let kary_or_tmr = timer!(Level::Debug; "Kary or");
-        let all_not_zero = parallel_fn(&bits, |b0, b1| server_key.bitor_parallelized(&b0, &b1));
+        let all_not_zero = parallel_fn(&bits, |b0, b1| server_key.bitor_parallelized(b0, b1));
         drop(kary_or_tmr);
 
         // add the point

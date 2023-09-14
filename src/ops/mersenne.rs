@@ -118,7 +118,7 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
     let x_mod_p2 = (|x: &RadixCiphertext| {
         let mut a = server_key.scalar_right_shift_parallelized(x, n as u64);
         let mut b = server_key
-            .sub_parallelized(&x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
+            .sub_parallelized(x, &server_key.scalar_left_shift_parallelized(&a, n as u64));
 
         let len = x.blocks().len();
         // a will be multiplied by c, so it must be at least NB + 1 long
@@ -140,7 +140,7 @@ pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB);
-    server_key.mul_assign_parallelized(&mut a_expanded, &b);
+    server_key.mul_assign_parallelized(&mut a_expanded, b);
     mod_mersenne::<NB, _>(&a_expanded, p, server_key)
 }
 

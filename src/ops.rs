@@ -38,7 +38,7 @@ pub fn selector_zero(
     let len = selector.blocks().len();
     #[cfg(not(feature = "inw_selector"))]
     {
-        let mut selector = server_key.trim_radix_blocks_msb(&selector, len - 1);
+        let mut selector = server_key.trim_radix_blocks_msb(selector, len - 1);
         server_key.mul_assign_parallelized(&mut res, &mut selector);
     }
     #[cfg(feature = "inw_selector")]
@@ -63,8 +63,7 @@ pub fn selector_zero_constant<const NB: usize, P: Numeral>(
     let len = selector.blocks().len();
     #[cfg(not(feature = "inw_selector"))]
     let res = {
-        let mut selector =
-            server_key.extend_radix_with_trivial_zero_blocks_msb(&selector, NB - len);
+        let mut selector = server_key.extend_radix_with_trivial_zero_blocks_msb(selector, NB - len);
         server_key.scalar_mul_assign_parallelized(&mut selector, a);
         selector
     };
@@ -110,7 +109,7 @@ pub fn modulo_fast<const NB: usize, P: Numeral>(
 ) -> RadixCiphertext {
     let len = x.blocks().len();
     let mut x = x.clone();
-    let is_gt = server_key.scalar_ge_parallelized(&mut x, b);
+    let is_gt = server_key.scalar_ge_parallelized(&x, b);
     let to_sub = selector_zero_constant::<NB, _>(b, &is_gt, server_key);
     server_key.sub_assign_parallelized(&mut x, &to_sub);
     server_key.trim_radix_blocks_msb_assign(&mut x, len - NB);
@@ -166,10 +165,10 @@ pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
             || {
                 server_key.add_parallelized(
                     &server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1),
-                    &b,
+                    b,
                 )
             },
-            || server_key.if_then_else_parallelized(&condition, &a, &b),
+            || server_key.if_then_else_parallelized(condition, a, b),
         );
         let sel_b = server_key.sub_parallelized(&added, &sel_a);
         (sel_a, server_key.trim_radix_blocks_msb(&sel_b, 1))
@@ -203,7 +202,7 @@ pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
         );
 
         (a, u) = rayon::join(
-            || server_key.scalar_right_shift_parallelized(&mut a, 1),
+            || server_key.scalar_right_shift_parallelized(&a, 1),
             || mul_mod_div_two(&u),
         );
 
@@ -323,7 +322,7 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
     // final result mod p
     // inverse can be **negative**. so we need to add p to make it positive
     server_key.scalar_add_assign_parallelized(&mut inv, p);
-    let mut is_gt = server_key.scalar_ge_parallelized(&mut inv, p);
+    let mut is_gt = server_key.scalar_ge_parallelized(&inv, p);
     server_key.trim_radix_blocks_msb_assign(&mut is_gt, padded_nb - 1);
     let to_sub =
         server_key.mul_parallelized(&server_key.create_trivial_radix(p, padded_nb), &is_gt);
@@ -363,7 +362,7 @@ pub fn sub_mod<const NB: usize, P: Numeral>(
 ) -> RadixCiphertext {
     let start_ops = Instant::now();
 
-    let is_gt = server_key.gt_parallelized(&b, &a);
+    let is_gt = server_key.gt_parallelized(b, a);
     let to_add = selector_zero_constant::<NB, _>(p, &is_gt, server_key);
     let mut a_expanded = server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1);
     server_key.add_assign_parallelized(&mut a_expanded, &to_add);
@@ -779,7 +778,7 @@ mod tests {
             || {
                 let mut expanded =
                     server_key.extend_radix_with_trivial_zero_blocks_msb(&ct_x1, NUM_BLOCK);
-                server_key.mul_assign_parallelized(&mut expanded, &mut ct_y1.clone());
+                server_key.mul_assign_parallelized(&mut expanded, &ct_y1);
                 expanded
             },
             || mod_mersenne::<NUM_BLOCK, _>(&ct_x1, p, &server_key),
