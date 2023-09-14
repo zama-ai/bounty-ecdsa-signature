@@ -528,7 +528,7 @@ mod tests {
     #[test]
     fn correct_fast_mod_reduc() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        const NUM_BLOCK: usize = 4;
+        const NUM_BLOCK: usize = 5;
         let p: u16 = 251;
         let a = 500;
         let b = 345;
@@ -547,7 +547,7 @@ mod tests {
     #[test]
     fn correct_mod_reduc() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        const NUM_BLOCK: usize = 4;
+        const NUM_BLOCK: usize = 8;
         let p: u16 = 251;
         let a = 62999;
         let b = 45678;
