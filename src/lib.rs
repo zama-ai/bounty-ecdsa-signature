@@ -8,7 +8,6 @@ use logging_timer::Level;
 use tfhe::integer::ClientKey;
 
 pub mod ecdsa;
-pub mod field;
 pub mod helper;
 pub mod numeral;
 pub mod ops;
