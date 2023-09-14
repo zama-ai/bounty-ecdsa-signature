@@ -515,15 +515,53 @@ mod tests {
         ops::{
             add_mod, double_mod, inverse_mod, inverse_mod_binary_gcd, inverse_mods,
             mersenne::mod_mersenne,
-            mul_mod, mul_mod_constant,
+            modulo_fast, mul_mod, mul_mod_constant,
             native::{
-                add_mod_native, double_mod_native, inverse_mod_native, mul_mod_native,
-                square_mod_native, sub_mod_native,
+                add_mod_native, double_mod_native, inverse_mod_native, modulo_native,
+                mul_mod_native, square_mod_native, sub_mod_native,
             },
             square_mod, sub_mod,
         },
         CLIENT_KEY,
     };
+
+    #[test]
+    fn correct_fast_mod_reduc() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u16 = 251;
+        let a = 500;
+        let b = 345;
+
+        let c = modulo_native(a, p);
+        let enc_c =
+            modulo_fast::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = modulo_native(b, p);
+        let enc_d =
+            modulo_fast::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+    }
+
+    #[test]
+    fn correct_mod_reduc() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u16 = 251;
+        let a = 62999;
+        let b = 45678;
+
+        let c = modulo_native(a, p);
+        let enc_c =
+            mod_mersenne::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+
+        let d = modulo_native(b, p);
+        let enc_d =
+            mod_mersenne::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
+        assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+    }
 
     #[test]
     fn correct_add_mod() {
