@@ -841,7 +841,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
 We can estimate the total cost of different window size with this equation
 
 $$
-⁍ 
+t(w)=T_S\cdot(2^w-1)\cdot\frac{B}{w}+T_K\cdot\lceil\frac{B}{w}\rceil 
 $$
 
 Where
@@ -853,7 +853,7 @@ Where
 
 We observed that based on 64 cores machine, the optimal window size are 6 or 7.
 
-![window.png](tutorial%20ffdd7366b07441368b8e5b966757c0b2/window.png)
+![window.png](./misc/window.png)
 
 ### Group Transformation
 
