@@ -1,5 +1,3 @@
-# Tutorial
-
 # Intro
 
 This tutorial provides an overview of ECDSA fundamentals, delves into the development of its homomorphic variant, discusses finite field and elliptic curve operations, and offers guidance on optimizing performance based on THFE characteristics.
@@ -25,7 +23,7 @@ $$
 y^2=x^3+ax+b
 $$
 
-But some time we will see the curve in the other form too. For example, **Edwards**, **Jacobian**, **Montgomery**. Which we will not cover in this topic since SECP256k1 uses Weierstrass equation.
+But some time we will see the curve in the other form too. For example, **Edwards**, **Jacobian**, **Montgomery**. Which we will not cover in this topic since Secp256k1 was in Weierstrass form.
 
 - $a, b$ - $a$ in $ax$ and $b$ in $+b$ in the curve equation which define it shape (and properties)
 - $p$ - Prime Modulus, a prime number that defines the finite field over which the elliptic curve.
@@ -34,7 +32,7 @@ But some time we will see the curve in the other form too. For example, **Edward
 
 ### Secp256k1
 
-Secp256k1 is an elliptic curve that wieldy adopted for it performance (ex. Bitcoin). the parameter and good property from the following parameter 
+`Secp256k1` is an elliptic curve that wieldy adopted for it performance (ex. Bitcoin). the parameter and good property from the following parameter 
 
 - a = 0, b = 7 - **a = 0** eliminate the need to compute anything related to **ax** term.
 - p = `FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F` or $2^{256} - 2^{32} - 2^9 - 2^8 - 2^7 - 2^6 - 2^4 - 1$. This prime basically 2^256 minus some relatively small number. apart from being close to 256 bits which is the amount of bit that we want. It also allow some speed up trick that we’ll go into more detail in later section of this tutorial
@@ -46,7 +44,7 @@ We’ll assume that you already have a private key and a message.
 
 - First hash your message $z = hash(m)$ and mod (trim) to the size of n. but in this case the size already correct so there’s no need to trim.
 - Pick a secret random $k$ where $k$ is between $1$ and $n-1$
-- Calculate $kG=(x,y)$ where $G$ is the prime subgroup generator of Secp256k1. Note that this operation mean scalar multiply the generator point with $k$ and all of the inside operation is calculated using $\mod p$.
+- Calculate $kG=(x,y)$ where $G$ is the prime subgroup generator of `Secp256k1`. Note that this operation mean scalar multiplication of the generator point with $k$ and all of the inside operation is calculated using $\mod p$.
 - Find $r = x \mod n$. if $r = 0$ then back to pick $k$.
 - Find $s = k^{-1}\cdot(z + r \cdot sk) \mod n$ where $sk$ is the private key of the user, and if $s = 0$ then back to pick $k$. Note that $k^{-1}$ is not simple arithmetic inverse $1\div{k}$ but is a **modular inverse** where $k\cdot k^{-1}=1\mod n$.
 - $(r,s)$ is the signature
@@ -69,27 +67,52 @@ We benchmark each operation and came in conclusion that (in terms of speed)
 
 `All bits operation` << `comparators` << `add, sub` <<<< `mul` <<<< `div`
 
-Note that computation time also grows in exponential to bit length, and trivial or plain text operand are faster than cypher text.
+Note that computation time also grows in exponential to bit length, and cipher text to constant (in `tfhe-rs` we called this trivial or plain text) operand are faster than cipher text to cipher text operand.
 
 ```rust
-x = encrypt(123) // cypher
-y = encrypt(456) // cypher
-plaintext = 789    // plain
-a = x + plaintext // fast
-b = x + y // slow
+let x = encrypt(123); // ciphertext
+let y = encrypt(456); // ciphertext
+let plaintext = 789;    // constant
+let a = x + plaintext; // fast computation
+let b = x + y; // slow computation
 ```
+
+### Selector
+
+Selector is one of the crucial building blocks in homomorphic function, its used when we want to express `if a then x else y` in mathematical terms. Normally we would wrote this in algebraic expression as follow.
+
+$$
+r = a\cdot x+(a-1)\cdot y
+$$
+
+Is equivalent to
+
+$$
+r = \begin{cases}
+  x  & \text{is } a \\
+  y & \text{is not } a
+\end{cases}
+$$
+
+Since $a$ is a boolean-like (0 or 1) value so its value in homomorphic form can be trimmed to 1 bits (1 block). Hence in total, this selector expression requires 2 1-to-$b$ bits multiplication and 1 $b$ bits addition.
+
+Note that `tfhe-rs` also provides `if_else_then_parallelize` algorithm based on lookup table approach available to be used, but for constant case, i.e. one or more of $a, x, y$ is a constant, the above implementation appear to be faster.
+
+### Zero Selector
+
+There will be some special case of selector that we want `if a then x else 0` instead. This further reduce number of operation to only 1 1-to-$b$ bits multiplication.
 
 ## Finite Field Operation
 
 ### Modular Reduction
 
-Modular reduction or “mod” is one of the most used operation since in finite field math we basically have to mod everything by some number to make it secure, or mostly $p$. Making this operation fast have tremendous effect on final performance since it’s used basically everywhere.
+Modular reduction or “mod” is one of the most used operation since in finite field we basically have to mod everything by some number to make it secure, or mostly $p$. Making this operation fast have tremendous effect on final performance since it’s used basically everywhere.
 
-We tested a few implementation as follow
+We tested a few implementations as follows.
 
 ### Fast Mod
 
-We want to calculate $x \mod n$ where $x < 2n$. In this case, we can compare $x$ with $n$. If $x > n$, subtract $x$ by $n$.
+We want to calculate $x \mod n$ where $x < 2n$. In this case, we can compare $x$ with $n$. If $x > n$, subtract $x$ by $n$. This operation requires 1 $b+1$ bits constant comparator, 1 $b+1$ bits constant zero selector, and 1 $b+1$ bits subtraction.
 
 ```rust
 pub fn modulo_fast<const NB: usize, P: Numeral>(
@@ -109,13 +132,13 @@ pub fn modulo_fast<const NB: usize, P: Numeral>(
 
 ### General Case Mod
 
-In the `tfhe-rs 0.3` library, there is an implementation of the `div_rem` algorithm that provides a straightforward solution for finding remainders in all cases. However, it is important to note that this implementation is considered to be naive and is known to be one of the slowest operations in the TFHE library.
+In the `tfhe-rs` library, there is an implementation of the `div_rem` algorithm that provides a straightforward solution for finding remainders in all cases. However, it is important to note that this implementation is considered to be naive and is known to be one of the slowest operations in the TFHE library.
 
-We can use a algorithm specifically to only reduce $x$ to $x \mod n$, one of that algorithm which is the most simple one is called Barrett reduction. 
+We can use a algorithm specifically to only reduce $x$ to $x \mod n$, one of that algorithm which is the most simple one is called Barrett reduction.
 
 ### Barrett Reduction
 
-We can simply calculate $x\mod n=x-\lfloor x/n\rfloor \cdot n$ which we can approximate $1/n$ with $m/2^k$, observe that $1/2^k$ is simply right shift by $k$. So $x \mod n$ in this case requires 1 $b\cdot 2$ bits constant mul, 1 $k$-constant bitshift, 1 $b$ bits constant mul, 1 sub, and 1 fast mod.
+We can simply calculate $x\mod n=x-\lfloor x/n\rfloor \cdot n$ which we can approximate $1/n$ with $m/2^k$, observe that $1/2^k$ is simply right shift by $k$. So $x \mod n$ in this case requires 1 $2b$ bits constant mul, 1 $2b$ bits constant bitshift, 1 $b$ bits constant multiplication, 1 $b$ bits subtraction, and 1 $b$ bits fast mod.
 
 ```rust
 // pseudo code
@@ -154,11 +177,11 @@ pub fn mod<const NB: usize, P: Numeral>(
 
 ### Mersenne Mod
 
-We saw that Secp256k1 have a prime modulo that match a form of Pseudo-Mersenne prime or prime in the form of $p=2^m - k$ where $k < 2^m/2$ which allow for faster algorithm. One of the algorithm is called Mersenne Reduction that work on $x \mod m$ where $x < n^2$.
+We saw that `Secp256k1` have a prime modulo that match a form of Pseudo-Mersenne prime or prime in the form of $p=2^m - k$ where $k < 2^m/2$ which allow for faster algorithm. One of the algorithm is called Mersenne Reduction that works on $x \mod m$ where $x < n^2$.
 
 We can find $a,b$ from $x= a\cdot 2^m+b$ and then calculate $x \mod n = a\cdot k+b$ and repeat the algorithm until $x < n$. We observe that the algorithm 2 times and then fast mod to get $x \mod n$ without force exit condition.
 
-In this algorithm, we ran 2 pass of Mersenne reduction which ended up in x2 2 $m$-bitshift, x2 1 $b/2$ bits constant mul, and finally 1 fast mod.
+In homomorphic variant of this algorithm, we ran 2 pass of Mersenne reduction plus a fast mod which ended up approximately in 4 $m$ bits constant bitshift, 2 $b$ bits constant multiplication, and 1 $b$ bits fast mod.
 
 ```rust
 pub fn mod_mersenne<const NB: usize, P: Numeral>(
@@ -207,7 +230,7 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
 
 ### Modular Addition & Modular Multiplication
 
-Our `add_mod` is based on add and fast mod.
+Our `add_mod` is based on addition and fast mod. In total it costs 1 $b+1$ bits addition and 1 $b$ bits fast mod.
 
 ```rust
 pub fn add_mod<const NB: usize, P: Numeral>(
@@ -222,7 +245,7 @@ pub fn add_mod<const NB: usize, P: Numeral>(
 }
 ```
 
-Our `mul_mod` is based on multiplication and Mersenne Barrett Reduction.
+Our `mul_mod` is based on multiplication and Mersenne Barrett Reduction. In total it costs 1 $2b$ bits multiplication and 1 $b$ bits mersenne mod.
 
 ```rust
 pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
@@ -239,11 +262,11 @@ pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
 
 ### Modular Inverse
 
-Modular inverse $x^{-1}$ is a multiplicative inverse of some value $x$ on $\mod n$ which $x\cdot x^{-1}=1\mod n$ and is considered the slowest function out of all primitive function. But while rarely used, this operation contributed to significant % of final run time. There’re a few way to get Inverse namely
+Modular inverse $x^{-1}$ is a multiplicative inverse of some value $x$ on $\mod n$ which $x\cdot x^{-1}=1\mod n$ and is considered the slowest function out of all primitive function. But while rarely used, this operation contributed to significant percent of final run time. There’re a few way to get Inverse namely.
 
 ### Fermat's little theorem
 
-We can calculate inverse using $x^{-1} = x^{p-1} \mod p$. While this is a simple algorithm but it require 1 modular exponentiation or $b$ bits double mod, $b$ bits add mod, and $b$ bits mul mod which is extremely expensive.
+We can calculate inverse using $x^{-1} = x^{p-1} \mod p$. While this is a simple algorithm but it require 1 modular exponentiation or $b$ $b$ bits double mod, $b$ $b$ bits add mod, and $b$ $b$ bits mul mod which is extremely expensive.
 
 ### Trimmed Extended GCD
 
@@ -258,7 +281,7 @@ function extended_gcd(a, b)
     
     while r ≠ 0 do
 				// each loop will reduce r by at least half (or 1 bit)
-        quotient := old_r div r
+        quotient := old_r / r
         (old_r, r) := (r, old_r − quotient × r)
         (old_s, s) := (s, old_s − quotient × s)
         (old_t, t) := (t, old_t − quotient × t)
@@ -343,7 +366,7 @@ pub fn inverse_mod_trim<const NB: usize, P: Numeral>(
 
 ### Binary GCD
 
-There’re also another candidate that we explore but due to it originally have 3 branches, and fast operation (all native operation can be expressed bitshift and constant homomorphic operation).
+There’re also another candidate that we explore but due to it originally have 3 branches, and fast operation (all native operation can be expressed in bitshift and constant homomorphic operation).
 
 But finally this algorithm cannot do guaranteed bit trimming so this is slower than trimmed extended GCD.
 
@@ -590,7 +613,7 @@ def double_and_add(G, x):
 	return result
 ```
 
-In the homomorphic variant, we calculate the bits by bitand the current bits by 1, and update the current bits by right bitshift by 1 every iteration. So in total it requires $b$ $b$-bits bitand, bitshift, projective addition, projective double, and $3b$ $b$-bits multiplication.
+In the homomorphic variant, we calculate the bits by bitand the current bits by 1, and update the current bits by right bitshift by 1 every iteration. So in total it requires $b$ $b$ bits bitand, bitshift, projective addition, projective double, and $3b$ $b$ bits multiplication.
 
 ```rust
 pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
@@ -645,7 +668,7 @@ In our case, we need scalar multiplication $kG$ for scalar $k$ on generator poin
 
 However, the amount of possible outcome scale exponentially by the amount of scalar total bits. Which mean that it not practical for 256 bits which need $2^{256}$ outcome, but we can do [sliding window](https://www.notion.so/tutorial-ffdd7366b07441368b8e5b966757c0b2?pvs=21) on the value to select some of the bits from the scalar and make the selector less computation intensive.
 
-So basically, we select first $W$ bits from the scalar, precompute $2^{W-1}$ points by doubling $G$ in native function, make $2^{W-1}$ selector and select 1 point from those precomputed points, add the selected point to the result, traverse further by $W$ bits, then repeat until bits are exhausted.
+So basically, we select first $W$ bits from the scalar, precompute $2^{W-1}$ points by recursively doubling $G$, make $2^{W-1}$ selector and select 1 point from those precomputed points, add the selected point to the result, traverse further by $W$ bits, then repeat until bits are exhausted.
 
 ```rust
 // pseudo code
@@ -665,7 +688,7 @@ for i from m downto 0 do
 return Q
 ```
 
-In the homomorphic variants, we can reuse the bits selection from the double-and-add method, calculate not-bit, bitand each bit together to select the value. In the selection process we can use tree-based calculation method to parallelize the multiplication and addition process.
+In the homomorphic variants, we can reuse the bits selection from the double-and-add method, calculate not-bit and compute bitand of all bits together and multiply with the value do the value selection. In the selection process we can use tree-based calculation method to parallelize the multiplication and addition process.
 
 ```rust
 pub fn group_projective_scalar_mul_constant_windowed<
@@ -818,11 +841,11 @@ Where
 
 We observed that based on 64 cores machine, the optimal window size are 6 or 7.
 
-![window.png](res/window.png)
+![window.png](tutorial%20ffdd7366b07441368b8e5b966757c0b2/window.png)
 
 ### Group Transformation
 
-Simply convert projective Jacobian form back to affine form. This requires 1 inverse mod and 2 mul mod.
+Simply convert projective Jacobian form back to affine form. This operation requires 1 inverse mod and 2 mul mod.
 
 ```rust
 pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
@@ -846,7 +869,7 @@ pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
 
 Finally, we can put everything together. in our implementation we assume that private key $sk$, message, and nonce $k$ are provided.
 
-We can calculate $z^{-1}$ and $k^{-1}$ in parallel to save sometime. 
+We can calculate $z^{-1}$ and $k^{-1}$ in parallel to save some time. 
 
 ```rust
 pub fn ecdsa_sign<const NB: usize, P: Numeral>(
@@ -942,12 +965,12 @@ pub fn ecdsa_verify<const NB: usize, P: Numeral>(
 
 ## Run this code
 
-### setup
+### Setup
 
-- this code will run for 1-2 day on 64 cores machine. cloud VM and tmux is recommended but not required
-- [rust](https://www.rust-lang.org/tools/install)
+- The ECDSA signing in `Secp256k1` code will run for 1-2 day on 64 cores machine. Cloud VM and tmux is recommended but not required
+- [Rust](https://www.rust-lang.org/tools/install)
 
-### run
+### Run
 
 ```bash
 git clone https://github.com/Tetration-Lab/TFHECDSA
@@ -955,11 +978,11 @@ cd TFHECDSA
 cargo run --release --example ecdsa
 ```
 
-### log config
+### Log Level
 
-log level, there’s 3 level `Info`, `Debug`, `Traces` where default is `Debug` to change this use use `RUST_LOG="level"`  
+log level, there’s 3 level `Info`, `Debug`, `Traces` where default is `Debug` to change this use use `RUST_LOG="level"` 
 
-### navigation
+### Project Directory
 
 ```bash
 src
