@@ -266,7 +266,19 @@ Modular inverse $x^{-1}$ is a multiplicative inverse of some value $x$ on $\mod 
 
 ### Fermat's little theorem
 
-We can calculate inverse using $x^{-1} = x^{p-1} \mod p$. While this is a simple algorithm but it require 1 modular exponentiation or $b$ $b$ bits double mod, $b$ $b$ bits add mod, and $b$ $b$ bits mul mod which is extremely expensive.
+Fermat’s little theorem state that if $p$ is a prime number, then for any integer $x$, the number $x^p-a$ is an integer multiple of $p$.
+
+$$
+x^p=x\mod p
+$$
+
+And if $x$ is not divisible by $p$, we can get multiplicative inverse of $x$ directly by calculating $x^{-1}$.
+
+$$
+x^{-1} = x^{p-2} \mod p
+$$
+
+While this is a simple algorithm but it require 1 modular exponentiation or $b$ $b$ bits double mod, $b$ $b$ bits add mod, and $b$ $b$ bits mul mod which is extremely expensive.
 
 ### Trimmed Extended GCD
 
