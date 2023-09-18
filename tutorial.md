@@ -963,7 +963,7 @@ log level, there’s 3 level `Info`, `Debug`, `Traces` where default is `Debug
 
 ```bash
 src
-├── ecdsa.rs // main extry point here
+├── ecdsa.rs // main entry point here
 ├── helper.rs 
 ├── lib.rs
 ├── main.rs
