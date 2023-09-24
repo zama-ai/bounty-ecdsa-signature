@@ -3,14 +3,12 @@ name = "fhe"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+lto = "fat"
 
-#[profile.release]
-#lto = "fat"
-
-#[profile.release_lto_off]
-#inherits = "release"
-#lto = "off"
+[profile.release_lto_off]
+inherits = "release"
+lto = "off"
 
 [dependencies]
 num-bigint = { version = "0.4.3", default-features = false }
@@ -24,7 +22,7 @@ ctor = "0.2.4"
 
 [features]
 default = []
-#nightly-avx512 = ["tfhe/nightly-avx512"]
+nightly-avx512 = ["tfhe/nightly-avx512"]
 go_big = []
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.tfhe]
