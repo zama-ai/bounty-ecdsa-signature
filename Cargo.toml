@@ -26,8 +26,6 @@ ctor = "0.2.4"
 default = []
 #nightly-avx512 = ["tfhe/nightly-avx512"]
 go_big = []
-inw_selector = []
-binary_gcd = []
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.tfhe]
 git = "https://github.com/zama-ai/tfhe-rs"

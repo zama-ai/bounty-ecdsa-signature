@@ -36,20 +36,8 @@ pub fn selector_zero(
 ) -> RadixCiphertext {
     let mut res = a.clone();
     let len = selector.blocks().len();
-    #[cfg(not(feature = "inw_selector"))]
-    {
-        let mut selector = server_key.trim_radix_blocks_msb(selector, len - 1);
-        server_key.mul_assign_parallelized(&mut res, &mut selector);
-    }
-    #[cfg(feature = "inw_selector")]
-    {
-        let a_len = a.blocks().len();
-        let not_selector = server_key.sub_parallelized(
-            &server_key.create_trivial_radix(0, a_len),
-            &server_key.extend_radix_with_trivial_zero_blocks_msb(selector, a_len - len),
-        );
-        server_key.bitand_assign_parallelized(&mut res, &not_selector);
-    }
+    let mut selector = server_key.trim_radix_blocks_msb(selector, len - 1);
+    server_key.mul_assign_parallelized(&mut res, &mut selector);
     res
 }
 
@@ -61,22 +49,9 @@ pub fn selector_zero_constant<const NB: usize, P: Numeral>(
     server_key: &ServerKey,
 ) -> RadixCiphertext {
     let len = selector.blocks().len();
-    #[cfg(not(feature = "inw_selector"))]
-    let res = {
-        let mut selector = server_key.extend_radix_with_trivial_zero_blocks_msb(selector, NB - len);
-        server_key.scalar_mul_assign_parallelized(&mut selector, a);
-        selector
-    };
-    #[cfg(feature = "inw_selector")]
-    let res = {
-        let mut not_selector = server_key.sub_parallelized(
-            &server_key.create_trivial_radix(0, NB),
-            &server_key.extend_radix_with_trivial_zero_blocks_msb(selector, NB - len),
-        );
-        server_key.scalar_bitand_assign_parallelized(&mut not_selector, a);
-        not_selector
-    };
-    res
+    let mut selector = server_key.extend_radix_with_trivial_zero_blocks_msb(selector, NB - len);
+    server_key.scalar_mul_assign_parallelized(&mut selector, a);
+    selector
 }
 
 /// selector ? a : b
@@ -127,99 +102,6 @@ pub fn modulo_div_rem<const NB: usize, P: Numeral>(
     r
 }
 
-pub fn inverse_mod_binary_gcd<const NB: usize, P: Numeral>(
-    a: &RadixCiphertext,
-    p: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    // implement binary gcd algorithm
-    // assume a < p. (no check)
-    let div_two = inverse_mod_native(P::TWO, p);
-
-    let mul_mod_div_two = |a: &RadixCiphertext| {
-        let res = server_key.scalar_mul_parallelized(
-            &server_key.extend_radix_with_trivial_zero_blocks_msb(a, NB),
-            div_two,
-        );
-        mod_mersenne::<NB, _>(&res, p, server_key)
-    };
-
-    let mut a = a.clone();
-    let mut b = server_key.create_trivial_radix(p, NB);
-    let mut u: RadixCiphertext = server_key.create_trivial_radix(1, NB);
-    let mut v: RadixCiphertext = server_key.create_trivial_radix(0, NB);
-
-    read_client_key(|server_key| {
-        println!(
-            "a = {}, b = {}, u = {}, v = {} -----",
-            format(server_key.decrypt_radix::<P>(&a)),
-            format(server_key.decrypt_radix::<P>(&b)),
-            format(server_key.decrypt_radix::<P>(&u)),
-            format(server_key.decrypt_radix::<P>(&v)),
-        )
-    });
-
-    // if condition return a,b else b,a
-    let select_two = |condition: &RadixCiphertext, a: &RadixCiphertext, b: &RadixCiphertext| {
-        let (added, sel_a) = rayon::join(
-            || {
-                server_key.add_parallelized(
-                    &server_key.extend_radix_with_trivial_zero_blocks_msb(a, 1),
-                    b,
-                )
-            },
-            || server_key.if_then_else_parallelized(condition, a, b),
-        );
-        let sel_b = server_key.sub_parallelized(&added, &sel_a);
-        (sel_a, server_key.trim_radix_blocks_msb(&sel_b, 1))
-    };
-
-    for _i in 0..<P as Numeric>::BITS * 2 - 1 {
-        let _tmr = timer!(Level::Trace; "Inverse Mod Binary GCD", "Bit {}", _i);
-
-        let (mut a_mod_two, mut a_lt_b) = rayon::join(
-            || server_key.scalar_bitand_parallelized(&a, 1),
-            || server_key.lt_parallelized(&a, &b),
-        );
-        server_key.trim_radix_blocks_msb_assign(&mut a_mod_two, NB - 1);
-        server_key.trim_radix_blocks_msb_assign(&mut a_lt_b, NB - 1);
-        let a_mod_two_and_lt_b = server_key.bitand_parallelized(&a_mod_two, &a_lt_b);
-
-        ((a, b), (u, v)) = rayon::join(
-            || select_two(&a_mod_two_and_lt_b, &b, &a),
-            || select_two(&a_mod_two_and_lt_b, &v, &u),
-        );
-
-        (a, u) = rayon::join(
-            || {
-                let mult = server_key.mul_parallelized(&b, &a_mod_two);
-                sub_mod::<NB, _>(&a, &mult, p, server_key)
-            },
-            || {
-                let mult = server_key.mul_parallelized(&v, &a_mod_two);
-                sub_mod::<NB, _>(&u, &mult, p, server_key)
-            },
-        );
-
-        (a, u) = rayon::join(
-            || server_key.scalar_right_shift_parallelized(&a, 1),
-            || mul_mod_div_two(&u),
-        );
-
-        read_client_key(|server_key| {
-            println!(
-                "a = {}, b = {}, u = {}, v = {} -----",
-                format(server_key.decrypt_radix::<P>(&a)),
-                format(server_key.decrypt_radix::<P>(&b)),
-                format(server_key.decrypt_radix::<P>(&u)),
-                format(server_key.decrypt_radix::<P>(&v)),
-            )
-        });
-    }
-
-    v
-}
-
 /// a^-1 mod p where a*a^-1 = 1 mod p
 #[inline]
 #[time("debug", "Inverse Mod")]
@@ -228,10 +110,7 @@ pub fn inverse_mod<const NB: usize, P: Numeral>(
     p: P,
     server_key: &ServerKey,
 ) -> RadixCiphertext {
-    #[cfg(feature = "binary_gcd")]
-    return inverse_mod_binary_gcd::<NB, _>(a, p, server_key);
-    #[cfg(not(feature = "binary_gcd"))]
-    return inverse_mod_trim::<NB, _>(a, p, server_key);
+    inverse_mod_trim::<NB, _>(a, p, server_key)
 }
 
 #[inline]
@@ -476,30 +355,6 @@ pub fn pow_mod<const NB: usize, P: Numeral>(
     res
 }
 
-pub fn inverse_mod_pow<const NB: usize, P: Numeral>(
-    a: &RadixCiphertext,
-    p: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    let mut res = server_key.create_trivial_radix(1, NB);
-    let mut base = a.clone();
-    let mut exponent = p - P::cast_from(2u64);
-    let loop_end = <P as Numeric>::BITS;
-    for _i in 0..loop_end {
-        let b = base.clone();
-        rayon::join(
-            || {
-                if exponent & P::ONE == P::ONE {
-                    res = mul_mod::<NB, _>(&res, &b, p, server_key);
-                }
-                exponent >>= 1;
-            },
-            || base = square_mod::<NB, _>(&base, p, server_key),
-        );
-    }
-    res
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
@@ -513,7 +368,7 @@ mod tests {
         helper::set_client_key,
         numeral::Numeral,
         ops::{
-            add_mod, double_mod, inverse_mod, inverse_mod_binary_gcd, inverse_mods,
+            add_mod, double_mod, inverse_mod, inverse_mods,
             mersenne::mod_mersenne,
             modulo_fast, mul_mod, mul_mod_constant,
             native::{
@@ -767,29 +622,6 @@ mod tests {
         let enc_l =
             inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(f, NUM_BLOCK), p, &server_key);
         assert_eq!(l, client_key.decrypt_radix::<u8>(&enc_l));
-    }
-
-    #[test]
-    fn bench_inverse() {
-        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        set_client_key(&client_key);
-        const NUM_BLOCK: usize = 4;
-        type Integer = u8;
-        let p: Integer = 251;
-        let a: Integer = 147;
-
-        let c = inverse_mod_native(a, p);
-
-        let enc_c = inverse_mod_binary_gcd::<NUM_BLOCK, _>(
-            &client_key.encrypt_radix(a, NUM_BLOCK),
-            p,
-            &server_key,
-        );
-        assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c));
-
-        let enc_c_other =
-            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
-        assert_eq!(c, client_key.decrypt_radix::<Integer>(&enc_c_other));
     }
 
     #[test]
