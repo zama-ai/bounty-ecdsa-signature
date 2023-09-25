@@ -359,6 +359,7 @@ pub fn pow_mod<const NB: usize, P: Numeral>(
 mod tests {
     use std::time::Instant;
 
+    use rand::{rngs::OsRng, thread_rng, Rng};
     use tfhe::{
         integer::{keycache::IntegerKeyCache, U256},
         shortint::prelude::PARAM_MESSAGE_2_CARRY_2,
@@ -400,6 +401,18 @@ mod tests {
     }
 
     #[test]
+    fn correct_fast_mod_reduc_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 5;
+        let p: u16 = 251;
+        let a = OsRng.gen_range(0..2 * p);
+        let c = modulo_native(a, p);
+        let enc_c =
+            modulo_fast::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_mod_reduc() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         const NUM_BLOCK: usize = 8;
@@ -416,6 +429,19 @@ mod tests {
         let enc_d =
             mod_mersenne::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
         assert_eq!(d as u8, client_key.decrypt_radix::<u8>(&enc_d));
+    }
+
+    #[test]
+    fn correct_mod_reduc_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 8;
+        let p: u16 = 251;
+        let a = OsRng.gen_range(0..p.pow(2));
+
+        let c = modulo_native(a, p);
+        let enc_c =
+            mod_mersenne::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
     }
 
     #[test]
@@ -459,6 +485,24 @@ mod tests {
     }
 
     #[test]
+    fn correct_add_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+
+        let a = OsRng.gen_range(0..p);
+        let b = OsRng.gen_range(0..p);
+        let c = add_mod_native(a, b, p);
+        let enc_c = add_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_sub_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         const NUM_BLOCK: usize = 4;
@@ -490,6 +534,24 @@ mod tests {
     }
 
     #[test]
+    fn correct_sub_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = OsRng.gen_range(0..p);
+        let b = OsRng.gen_range(0..p);
+        let c = sub_mod_native(a, b, p);
+
+        let enc_c = sub_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_double_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         const NUM_BLOCK: usize = 4;
@@ -510,6 +572,19 @@ mod tests {
         let enc_e =
             double_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(b, NUM_BLOCK), p, &server_key);
         assert_eq!(e as u8, client_key.decrypt_radix::<u8>(&enc_e));
+    }
+
+    #[test]
+    fn correct_double_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = OsRng.gen_range(0..p);
+        let c = double_mod_native(a, p);
+
+        let enc_c =
+            double_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
     }
 
     #[test]
@@ -536,9 +611,21 @@ mod tests {
     }
 
     #[test]
+    fn correct_square_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = OsRng.gen_range(0..p);
+        let c = square_mod_native(a, p);
+
+        let enc_c =
+            square_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_mul_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        *CLIENT_KEY.write().unwrap() = Some(client_key.clone());
         const NUM_BLOCK: usize = 4;
         let p: u8 = 251;
         let a = 249;
@@ -576,9 +663,26 @@ mod tests {
     }
 
     #[test]
+    fn correct_mul_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 251;
+        let a = OsRng.gen_range(0..p);
+        let b = OsRng.gen_range(0..p);
+        let c = mul_mod_native(a, b, p);
+
+        let enc_c = mul_mod::<NUM_BLOCK, _>(
+            &client_key.encrypt_radix(a, NUM_BLOCK),
+            &client_key.encrypt_radix(b, NUM_BLOCK),
+            p,
+            &server_key,
+        );
+        assert_eq!(c as u8, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_inverse_mod() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-        set_client_key(&client_key);
         const NUM_BLOCK: usize = 4;
         let p: u8 = 157;
         let a = 8;
@@ -625,6 +729,19 @@ mod tests {
     }
 
     #[test]
+    fn correct_inverse_mod_random() {
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+        let p: u8 = 157;
+        let a = OsRng.gen_range(0..p);
+
+        let c = inverse_mod_native(a, p);
+        let enc_c =
+            inverse_mod::<NUM_BLOCK, _>(&client_key.encrypt_radix(a, NUM_BLOCK), p, &server_key);
+        assert_eq!(c, client_key.decrypt_radix::<u8>(&enc_c));
+    }
+
+    #[test]
     fn correct_inverse_mods() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
         set_client_key(&client_key);
@@ -650,33 +767,27 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "bench"]
-    fn parallel_mod_reduc_mul() {
+    fn correct_inverse_mods_random() {
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
-
+        set_client_key(&client_key);
         const NUM_BLOCK: usize = 4;
-        type Integer = u8;
-        let p: Integer = 251;
-        let x1: Integer = 8;
-        let y1: Integer = 45;
+        let p: u8 = 157;
+        let a = OsRng.gen_range(0..p);
+        let b = OsRng.gen_range(0..p);
 
-        let ct_x1 = client_key.encrypt_radix(x1, NUM_BLOCK);
-        let ct_y1 = client_key.encrypt_radix(y1, NUM_BLOCK);
+        let enc_a = client_key.encrypt_radix(a, NUM_BLOCK);
+        let enc_b = client_key.encrypt_radix(b, NUM_BLOCK);
 
-        let now = Instant::now();
-        let _ = mul_mod::<NUM_BLOCK, _>(&ct_x1, &ct_y1, p, &server_key);
-        println!("mul_mod: {:.2}s", now.elapsed().as_secs_f32());
+        let r_a = inverse_mod_native(a, p);
+        let r_b = inverse_mod_native(b, p);
 
-        let now = Instant::now();
-        let _ = rayon::join(
-            || {
-                let mut expanded =
-                    server_key.extend_radix_with_trivial_zero_blocks_msb(&ct_x1, NUM_BLOCK);
-                server_key.mul_assign_parallelized(&mut expanded, &ct_y1);
-                expanded
-            },
-            || mod_mersenne::<NUM_BLOCK, _>(&ct_x1, p, &server_key),
-        );
-        println!("parallel_mod_mersenne: {:.2}s", now.elapsed().as_secs_f32());
+        let results = inverse_mods::<NUM_BLOCK, _>(&[enc_a, enc_b], p, &server_key);
+        assert_eq!(r_a, client_key.decrypt_radix::<u8>(&results[0]));
+        assert_eq!(r_b, client_key.decrypt_radix::<u8>(&results[1]));
+
+        let results =
+            inverse_mods::<NUM_BLOCK, _>(&[results[0].clone(), results[1].clone()], p, &server_key);
+        assert_eq!(a, client_key.decrypt_radix::<u8>(&results[0]));
+        assert_eq!(b, client_key.decrypt_radix::<u8>(&results[1]));
     }
 }
