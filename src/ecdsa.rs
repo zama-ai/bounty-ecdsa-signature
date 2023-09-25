@@ -108,58 +108,6 @@ pub fn ecdsa_sign_native<P: Numeral>(
     (r, s)
 }
 
-pub fn ecdsa_verify<const NB: usize, P: Numeral>(
-    public_key: (P, P),
-    signature: (RadixCiphertext, RadixCiphertext),
-    message: P,
-    generator: (P, P),
-    q_modulo: P,
-    r_modulo: P,
-    server_key: &ServerKey,
-) -> RadixCiphertext {
-    println!("ECDSA verify start");
-    let ops_start = Instant::now();
-    // s^-1
-    let s_inv = inverse_mod::<NB, _>(&signature.1, r_modulo, server_key);
-    // u1 = m * s^-1
-    let u1 = mul_mod::<NB, _>(
-        &s_inv,
-        &server_key.create_trivial_radix(message, NB),
-        r_modulo,
-        server_key,
-    );
-    // u2 = r * s^-1
-    let u2 = mul_mod::<NB, _>(&s_inv, &signature.0, r_modulo, server_key);
-    // (x, y) = u1 * G + u2 * Q
-    let (x_proj_1, y_proj_1, z_proj_1) = group_projective_scalar_mul_constant_windowed::<
-        WINDOW,
-        NB,
-        _,
-    >(generator.0, generator.1, &u1, q_modulo, server_key);
-    let (x_proj_2, y_proj_2, z_proj_2) = group_projective_scalar_mul_constant_windowed::<
-        WINDOW,
-        NB,
-        _,
-    >(
-        public_key.0, public_key.1, &u2, q_modulo, server_key
-    );
-    let (x_proj, y_proj, z_proj) = group_projective_add_projective::<NB, _>(
-        &x_proj_1, &y_proj_1, &z_proj_1, &x_proj_2, &y_proj_2, &z_proj_2, q_modulo, server_key,
-    );
-    let is_z_zero = server_key.scalar_eq_parallelized(&z_proj, 0);
-    let (x, _y) =
-        group_projective_into_affine::<NB, _>(&x_proj, &y_proj, &z_proj, q_modulo, server_key);
-    let x_mod_scalar = modulo_fast::<NB, _>(&x, r_modulo, server_key);
-    let is_x_eq_r = server_key.eq_parallelized(&x_mod_scalar, &signature.0);
-
-    println!(
-        "ecdsa verify done in {:.2}s",
-        ops_start.elapsed().as_secs_f64(),
-    );
-    // valid if z != 0 && x == r
-    server_key.bitand_parallelized(&is_z_zero, &is_x_eq_r)
-}
-
 #[cfg(test)]
 mod tests {
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
@@ -176,7 +124,7 @@ mod tests {
     use super::ecdsa_sign_native;
 
     #[test]
-    fn correct_ecdsa_sign() {
+    fn correct_ecdsa_sign_verify() {
         let q_modulo: u8 = 251;
         let gx: u8 = 32;
         let gy: u8 = 143;
