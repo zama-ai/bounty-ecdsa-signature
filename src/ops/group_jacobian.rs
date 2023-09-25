@@ -27,6 +27,7 @@ use super::{
     selector, square_mod, sub_mod,
 };
 
+/// native double group element using jacobian coordinates.
 pub fn group_projective_double_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P, P) {
     // case curve a = 0
     // a = x^2
@@ -57,6 +58,8 @@ pub fn group_projective_double_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P,
     (x_prime, y_prime, z_prime)
 }
 
+/// native add 2 group elements using between jacobian and affine coordinates
+/// this algorithm faster than adding 2 group elements using jacobian coordinates
 pub fn group_projective_add_affine_native<P: Numeral>(
     x: P,
     y: P,
@@ -180,6 +183,8 @@ pub fn group_projective_add_projective_native<P: Numeral>(
     return (x_prime, y_prime, z_prime);
 }
 
+/// homomorphic add 2 group elements between jacobian coordinates and affine coordinates
+/// this algorithm faster than adding 2 group elements using jacobian coordinates
 #[allow(clippy::too_many_arguments)]
 #[time("info", "Group Projective Add Mixed")]
 pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
@@ -321,6 +326,7 @@ pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
     (x_prime, y_prime, z_prime)
 }
 
+/// homomorphic group elements double for jacobian coordinates
 #[time("info", "Group Projective Double")]
 pub fn group_projective_double<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
@@ -379,6 +385,7 @@ pub fn group_projective_double<const NB: usize, P: Numeral>(
     (x_prime, y_prime, z_prime)
 }
 
+/// homomorphic group elements add between jacobian coordinates
 #[time("info", "Group Projective Add")]
 #[allow(clippy::too_many_arguments)]
 pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
@@ -553,6 +560,7 @@ pub fn group_projective_add_projective<const NB: usize, P: Numeral>(
     (x_prime, y_prime, z_prime)
 }
 
+/// homomorphic scalar mul for group elements in jacobian coordinates
 pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
     y: &RadixCiphertext,
@@ -598,6 +606,7 @@ pub fn group_projective_scalar_mul<const NB: usize, P: Numeral>(
     (res_x, res_y, res_z)
 }
 
+/// homomorphic scalar mul for group elements in jacobian coordinates for constant group e.g. G
 pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
     x: P,
     y: P,
@@ -639,6 +648,7 @@ pub fn group_projective_scalar_mul_constant<const NB: usize, P: Numeral>(
     (res_x, res_y, res_z)
 }
 
+/// native scalar mul for group elements. 
 pub fn group_projective_scalar_mul_native<P: Numeral>(
     x: P,
     y: P,
@@ -668,6 +678,8 @@ pub fn group_projective_scalar_mul_native<P: Numeral>(
     (res_x, res_y, res_z)
 }
 
+/// homomorphic scalar mul for group elements in jacobian coordinates for constant group e.g. G
+/// W is the window size. 6 is the best window size for 256 bit on 64 cores machine.
 #[time("info", "Group Projective Scalar Mul Windowed")]
 pub fn group_projective_scalar_mul_constant_windowed<
     const W: usize,
@@ -803,6 +815,7 @@ pub fn group_projective_scalar_mul_constant_windowed<
     (res_x, res_y, res_z)
 }
 
+/// homomorphic conversion from jacobian coordinates to affine coordinates
 #[time("info", "Group Projective Into Affine")]
 pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
@@ -820,7 +833,8 @@ pub fn group_projective_into_affine<const NB: usize, P: Numeral>(
         || mul_mod::<NB, _>(y, &z_inv3, p, server_key),
     )
 }
-
+/// homomorphic conversion from jacobian coordinates to affine coordinates with inverted z
+/// z inverse is can be computed outside of the function.
 #[time("info", "Group Projective Into Affine Inversed")]
 pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
@@ -837,7 +851,7 @@ pub fn group_projective_into_affine_inv<const NB: usize, P: Numeral>(
         || mul_mod::<NB, _>(y, &z_inv3, p, server_key),
     )
 }
-
+/// native conversion from jacobian coordinates to affine coordinates
 pub fn group_projective_into_affine_native<P: Numeral>(x: P, y: P, z: P, p: P) -> (P, P) {
     let z_inv = inverse_mod_native(z, p);
     let z_inv2 = square_mod_native(z_inv, p);

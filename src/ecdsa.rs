@@ -25,7 +25,7 @@ use crate::{
     WINDOW,
 };
 
-/// perform ECDSA signing on message `P` % `r` over secret key `secret_key` % `r` and nonce `k` % `r`
+/// perform homomorphic ECDSA signing on message `P` % `r` over secret key `secret_key` % `r` and nonce `k` % `r`
 /// with prime subgroup generator `x, y` % `q`
 pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     sk: &RadixCiphertext,
@@ -87,6 +87,7 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     (r, s)
 }
 
+/// verify ECDSA signature 
 pub fn ecdsa_sign_native<P: Numeral>(
     sk: P,
     k: P,

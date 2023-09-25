@@ -38,9 +38,9 @@ pub fn mersenne_coeff(coeff: &[u32]) -> (u32, BigInt, BigInt, BigInt) {
     (n, p, q, c)
 }
 
-#[inline(always)]
 /// Calculate n, c from p
 /// `c` must be in range 0 <= c <= 2^floor(n/2)
+#[inline(always)]
 pub fn mersenne_coeff_p<P: Numeral>(p: P) -> (u32, BigInt) {
     let pb = to_bigint(p);
     let n = bigint_ilog2_ceil(&pb);
@@ -49,7 +49,7 @@ pub fn mersenne_coeff_p<P: Numeral>(p: P) -> (u32, BigInt) {
     (n, c)
 }
 
-/// Calculate x mod p^2 mod p
+/// native x mod p^2 mod p
 /// `coeff` in the form of p = 2^n_0 - 2^n_1 - ... - 2^n_{k-1} - n_k
 pub fn mersenne_mod_native<P: Numeral>(x: P, p: P) -> P {
     let (n, c) = mersenne_coeff_p(p);
@@ -72,7 +72,8 @@ pub fn mersenne_mod_native<P: Numeral>(x: P, p: P) -> P {
     from_bigint(&if x_mod_p >= p { x_mod_p - p } else { x_mod_p })
 }
 
-/// Calculate x mod p^2 mod p
+/// homomorphic x mod p^2 mod p
+/// expect x < p^2
 #[time("trace", "Modulus Reduction Mersenne+Barrett")]
 pub fn mod_mersenne<const NB: usize, P: Numeral>(
     x: &RadixCiphertext,
@@ -132,7 +133,7 @@ pub fn mod_mersenne<const NB: usize, P: Numeral>(
     modulo_fast::<NB, _>(&x_mod_p2, p, server_key)
 }
 
-/// Calculate a * b mod p
+/// homomorphic a * b mod p
 pub fn mul_mod_mersenne<const NB: usize, P: Numeral>(
     a: &RadixCiphertext,
     b: &RadixCiphertext,
