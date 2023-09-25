@@ -87,7 +87,7 @@ pub fn ecdsa_sign<const NB: usize, P: Numeral>(
     (r, s)
 }
 
-/// verify ECDSA signature 
+/// verify ECDSA signature
 pub fn ecdsa_sign_native<P: Numeral>(
     sk: P,
     k: P,
@@ -134,6 +134,7 @@ pub fn ecdsa_verify_native<P: Numeral>(
 
 #[cfg(test)]
 mod tests {
+    use rand::{rngs::OsRng, Rng};
     use tfhe::{integer::keycache::IntegerKeyCache, shortint::prelude::PARAM_MESSAGE_2_CARRY_2};
 
     use crate::{
@@ -171,6 +172,28 @@ mod tests {
     }
 
     #[test]
+    fn correct_ecdsa_sign_verify_native_random() {
+        let q_modulo: u8 = 211;
+        let gx: u8 = 4;
+        let gy: u8 = 156;
+        let r_modulo: u8 = 199;
+
+        let sk = OsRng.gen_range(1..r_modulo);
+        let k = OsRng.gen_range(1..r_modulo);
+        let message = OsRng.gen_range(1..r_modulo);
+        let pk_projective = group_projective_scalar_mul_native(gx, gy, sk, q_modulo);
+        let pk = group_projective_into_affine_native(
+            pk_projective.0,
+            pk_projective.1,
+            pk_projective.2,
+            q_modulo,
+        );
+        let (r, s) = ecdsa_sign_native(sk, k, message, (gx, gy), q_modulo, r_modulo);
+        let is_valid = ecdsa_verify_native((r, s), message, pk, (gx, gy), q_modulo, r_modulo);
+        assert!(is_valid, "ECDSA signature is invalid");
+    }
+
+    #[test]
     fn correct_ecdsa_sign_verify() {
         let q_modulo: u8 = 211;
         let gx: u8 = 4;
@@ -180,6 +203,48 @@ mod tests {
         let sk = 111;
         let k = 71;
         let message = 89;
+        let (rx, ry) = ecdsa_sign_native(sk, k, message, (gx, gy), q_modulo, r_modulo);
+
+        let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
+        const NUM_BLOCK: usize = 4;
+
+        let enc_sk = client_key.encrypt_radix(sk, NUM_BLOCK);
+        let enc_k = client_key.encrypt_radix(k, NUM_BLOCK);
+
+        let (enc_rx, enc_ry) = ecdsa_sign::<NUM_BLOCK, _>(
+            &enc_sk,
+            &enc_k,
+            message,
+            (gx, gy),
+            q_modulo,
+            r_modulo,
+            &server_key,
+        );
+
+        assert_eq!(rx, u8::decrypt(&enc_rx, &client_key));
+        assert_eq!(ry, u8::decrypt(&enc_ry, &client_key));
+
+        let pk_projective = group_projective_scalar_mul_native(gx, gy, sk, q_modulo);
+        let pk = group_projective_into_affine_native(
+            pk_projective.0,
+            pk_projective.1,
+            pk_projective.2,
+            q_modulo,
+        );
+        let is_valid = ecdsa_verify_native((rx, ry), message, pk, (gx, gy), q_modulo, r_modulo);
+        assert!(is_valid, "ECDSA signature is invalid");
+    }
+
+    #[test]
+    fn correct_ecdsa_sign_verify_random() {
+        let q_modulo: u8 = 211;
+        let gx: u8 = 4;
+        let gy: u8 = 156;
+        let r_modulo: u8 = 199;
+
+        let sk = OsRng.gen_range(1..r_modulo);
+        let k = OsRng.gen_range(1..r_modulo);
+        let message = OsRng.gen_range(1..r_modulo);
         let (rx, ry) = ecdsa_sign_native(sk, k, message, (gx, gy), q_modulo, r_modulo);
 
         let (client_key, server_key) = IntegerKeyCache.get_from_params(PARAM_MESSAGE_2_CARRY_2);
