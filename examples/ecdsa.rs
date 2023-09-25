@@ -1,9 +1,11 @@
 use fhe::{
-    ecdsa::{ecdsa_sign, ecdsa_sign_native},
+    ecdsa::{ecdsa_sign, ecdsa_sign_native, ecdsa_verify_native},
     helper::{set_client_key, u256_from_decimal_string},
     numeral::Numeral,
-    ops::secp256k1::prelude::*,
-    stats::ProtocolStats,
+    ops::{
+        group_jacobian::{group_projective_into_affine_native, group_projective_scalar_mul_native},
+        secp256k1::prelude::*,
+    },
 };
 use tfhe::{
     integer::{keycache::IntegerKeyCache, U256},
@@ -25,11 +27,11 @@ fn main() {
         "65108744961846543415519418389643270459525907322081164366671650776835723265410",
     );
 
-    let signature_nativce = ecdsa_sign_native(sk, nonce, msg, *GENERATOR, *FQ_MODULO, *FR_MODULO);
+    let signature_native = ecdsa_sign_native(sk, nonce, msg, *GENERATOR, *FQ_MODULO, *FR_MODULO);
     println!(
         "Native signature r: {}, s: {}",
-        signature_nativce.0.format(),
-        signature_nativce.1.format()
+        signature_native.0.format(),
+        signature_native.1.format()
     );
 
     let sk_enc = client_key.encrypt_radix(sk, NUM_BLOCK);
@@ -45,10 +47,26 @@ fn main() {
         &server_key,
     );
 
-    println!(
-        "signature: r: {}, s: {}",
-        U256::decrypt(&signature.0, &client_key).format(),
-        U256::decrypt(&signature.1, &client_key).format()
+    let signature = (
+        U256::decrypt(&signature.0, &client_key),
+        U256::decrypt(&signature.1, &client_key),
     );
-    println!("stats: {}", ProtocolStats::stats());
+    println!(
+        "Signature: r: {}, s: {}",
+        signature.0.format(),
+        signature.1.format()
+    );
+
+    let public_key_projective =
+        group_projective_scalar_mul_native(GENERATOR.0, GENERATOR.1, sk, *FQ_MODULO);
+    let public_key = group_projective_into_affine_native(
+        public_key_projective.0,
+        public_key_projective.1,
+        public_key_projective.2,
+        *FQ_MODULO,
+    );
+    let is_valid = ecdsa_verify_native(
+        signature, msg, public_key, *GENERATOR, *FQ_MODULO, *FR_MODULO,
+    );
+    println!("Is signature valid?: {}", is_valid);
 }
