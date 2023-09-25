@@ -110,6 +110,76 @@ pub fn group_projective_add_affine_native<P: Numeral>(
     (x3, y3, z3)
 }
 
+pub fn group_projective_add_projective_native<P: Numeral>(
+    x: P,
+    y: P,
+    z: P,
+    other_x: P,
+    other_y: P,
+    other_z: P,
+    p: P,
+) -> (P, P, P) {
+    if z == P::ZERO {
+        return (other_x, other_y, other_z);
+    }
+
+    if other_z == P::ZERO {
+        return (x, y, z);
+    }
+
+    // z0z0 = z0^2
+    let z0z0 = square_mod_native(z, p);
+    // z1z1 = z1^2
+    let z1z1 = square_mod_native(other_z, p);
+    // u0 = x0*z1z1
+    let u0 = mul_mod_native(x, z1z1, p);
+    // u1 = x1*z0z0
+    let u1 = mul_mod_native(other_x, z0z0, p);
+    // s0 = y0*z1*z1z1
+    let s0 = mul_mod_native(y, mul_mod_native(other_z, z1z1, p), p);
+    // s1 = y1*z0*z0z0
+    let s1 = mul_mod_native(other_y, mul_mod_native(z, z0z0, p), p);
+
+    if u0 == u1 && s0 == s1 {
+        return group_projective_double_native(x, y, z, p);
+    }
+
+    // h = u1 - u0
+    let h = sub_mod_native(u1, u0, p);
+    // r = 2*(s1 - s0)
+    let r = double_mod_native(sub_mod_native(s1, s0, p), p);
+    // i = (2*h)^2
+    let i = square_mod_native(double_mod_native(h, p), p);
+    // j = h*i
+    let j = mul_mod_native(h, i, p);
+    // v = u0*i
+    let v = mul_mod_native(u0, i, p);
+    // x_prime = r^2 - j - 2*v
+    let x_prime = sub_mod_native(
+        sub_mod_native(square_mod_native(r, p), j, p),
+        double_mod_native(v, p),
+        p,
+    );
+    // y_prime = r*(v - x_prime) - 2*s0*j
+    let y_prime = sub_mod_native(
+        mul_mod_native(r, sub_mod_native(v, x_prime, p), p),
+        double_mod_native(mul_mod_native(s0, j, p), p),
+        p,
+    );
+    // z_prime = ((z0 + z1)^2 - z0z0 - z1z1)*h
+    let z_prime = mul_mod_native(
+        sub_mod_native(
+            sub_mod_native(square_mod_native(add_mod_native(z, other_z, p), p), z0z0, p),
+            z1z1,
+            p,
+        ),
+        h,
+        p,
+    );
+
+    return (x_prime, y_prime, z_prime);
+}
+
 #[allow(clippy::too_many_arguments)]
 #[time("info", "Group Projective Add Mixed")]
 pub fn group_projective_add_affine<const NB: usize, P: Numeral>(
